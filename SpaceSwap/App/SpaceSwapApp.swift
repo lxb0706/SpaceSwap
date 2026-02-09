@@ -6,6 +6,7 @@
 //
 
 import SwiftUI
+import SwiftData
 
 @main
 struct SpaceSwapApp: App {
@@ -13,5 +14,6 @@ struct SpaceSwapApp: App {
         WindowGroup {
             ContentView()
         }
+        .modelContainer(for: CompressionRecord.self)
     }
 }
