@@ -104,12 +104,15 @@ SpaceSwap/
     *   **原片未删**: 显示 "删除原片" 按钮 (红色)。
     *   **原片已删**: 显示 "恢复" (跳转系统相册) 或 "查看新视频"。
 
-### 3.5 设置页 (Settings)
-*   **分组结构**:
-    *   **扫描配置 (Scan)**: 忽略小文件阈值 (默认 50MB)。
-    *   **压缩策略 (Strategy)**: 默认编码格式 (H.265)、默认画质偏好。
-    *   **自动化 (Automation)**: "压缩后自动请求删除" (Toggle)。
-    *   **关于 (About)**: 隐私政策、版本号。
+### 3.6 设计系统 (Design System)
+*   **主题色 (Primary)**: **iOS System Blue** (`Color.blue`)。
+    *   保持纯粹、原生的 iOS 工具质感。
+    *   支持 Light/Dark Mode 自适应。
+*   **背景 (Background)**:
+    *   使用系统语义色 (`systemBackground`, `secondarySystemBackground`) 确保完美的深色模式体验。
+*   **风格**:
+    *   **Liquid Glass**: 底部 TabBar 和悬浮卡片使用 `Material` (UltraThinMaterial) 背景。
+    *   **Space Theme**: 仅在“扫描”和“压缩动画”等关键节点使用深邃的太空元素，其余界面保持干净的系统风格。
 
 ## 4. 数据与持久化 (New)
 
