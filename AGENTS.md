@@ -187,3 +187,31 @@ Recommended patterns:
 - Match existing target structure; if you create new targets, update `SpaceSwap.xcodeproj` via Xcode, not by hand‑editing `project.pbxproj`.
 - Keep changes buildable with `xcodebuild -scheme SpaceSwap build`.
 - When adding tests, ensure they are runnable individually via `-only-testing` identifiers.
+
+## 9. Git 提交规范
+
+本项目推荐使用「中括号标签」风格的提交信息，方便一眼看出提交类型。
+
+- 结构：`[tag] 简要描述`。
+- tag 与常见提交类型一一对应：
+- 常用 tag：
+  - `[feature]`  新功能（≈ feat）
+  - `[bugfix]`   修复 bug（≈ fix）
+  - `[docs]`     文档（≈ docs）
+  - `[style]`    风格 / UI 调整（≈ style）
+  - `[refactor]` 重构（≈ refactor）
+  - `[test]`     测试相关（≈ test）
+  - `[chore]`    杂项（≈ chore）
+
+示例：
+
+```text
+[feature] 支持系统相册大体积视频压缩
+[bugfix] 修复相册权限变更后列表不刷新的问题
+[docs] 补充 SpaceSwap 压缩策略说明
+[style] 优化压缩进度指示器的 UI 展示
+```
+
+**注意：**
+- 一个提交尽量只做一类事情，对应一个清晰的 type / tag。
+- 提交信息用英文或中文均可，但要能看出「做了什么」而不是只写「update」「fix」。
