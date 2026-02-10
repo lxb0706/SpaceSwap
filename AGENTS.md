@@ -1,217 +1,199 @@
 # SpaceSwap – Agent Guide
 
-Generated for AI/code agents working in this repo.
+## Overview
+iOS 相册空间优化工具，核心功能：扫描系统相册中的大体积视频并压缩以节省存储空间。
 
-## 0. Overview
+## Stack & Layout
+- **Platform**: iOS, SwiftUI, SwiftData, Xcode project
+- **Scheme**: `SpaceSwap`
+- **Targets**: `SpaceSwap` (app), `SpaceSwapTests` (unit), `SpaceSwapUITests` (UI)
 
-SpaceSwap 是一个面向系统相册的空间优化工具 App，主要通过访问系统相册，对体积较大的视频资源进行压缩以节省设备存储空间。同时也支持对照片等其他多媒体资源进行压缩处理，但核心场景是「大视频压缩腾出更多可用空间」。
-
-## 1. Stack & Project Layout
-- Platform: iOS, SwiftUI, Xcode project `SpaceSwap.xcodeproj`.
-- Targets:
-  - `SpaceSwap` – main app
-  - `SpaceSwapTests` – unit tests
-  - `SpaceSwapUITests` – UI tests
-- Source layout (top level):
-
-```text
-./
-├─ SpaceSwap.xcodeproj/        # Xcode project definition
-├─ SpaceSwap/                  # App target sources & assets
-│  ├─ SpaceSwapApp.swift       # App entry point (SwiftUI @main)
-│  ├─ ContentView.swift        # Root content view
-│  └─ Assets.xcassets/         # AppIcon, AccentColor, etc.
-├─ SpaceSwapTests/             # XCTest unit tests
-│  └─ SpaceSwapTests.swift
-└─ SpaceSwapUITests/           # XCTest UI tests
-   ├─ SpaceSwapUITests.swift
-   └─ SpaceSwapUITestsLaunchTests.swift
+```
+SpaceSwap/
+├─ App/                 # @main entry point
+├─ Features/            # Feature modules (Home, Compression, History, Settings)
+│  └─ {Feature}/        # View + ViewModel pairs
+├─ Models/              # Data models (PhotoAsset, CompressionRecord)
+├─ Services/            # Business logic (PhotoLibrary, Settings, Persistence)
+├─ Shared/
+│  ├─ Components/       # Reusable UI components
+│  └─ Extensions/       # Swift extensions
+└─ Assets.xcassets/     # App icons, colors
 ```
 
-No workspaces, SPM packages, or additional modules are defined in `project.pbxproj` at time of writing.
+## Build & Test Commands
 
-## 2. Build, Run, and Test
-
-### 2.1 CLI (xcodebuild)
-
-Project name: `SpaceSwap`  
-Primary scheme: `SpaceSwap`
-
-Run from repo root:
-
+### Build
 ```bash
-# Build app for iOS Simulator (Debug)
-xcodebuild \
-  -scheme SpaceSwap \
-  -destination 'platform=iOS Simulator,name=iPhone 16,OS=latest' \
-  build
-
-# Run all unit tests
-xcodebuild \
-  -scheme SpaceSwap \
-  -destination 'platform=iOS Simulator,name=iPhone 16,OS=latest' \
-  test \
-  -only-testing:SpaceSwapTests
-
-# Run all UI tests
-xcodebuild \
-  -scheme SpaceSwap \
-  -destination 'platform=iOS Simulator,name=iPhone 16,OS=latest' \
-  test \
-  -only-testing:SpaceSwapUITests
+xcodebuild -scheme SpaceSwap \
+  -destination 'platform=iOS Simulator,name=iPhone 16,OS=latest' build
 ```
 
-### 2.2 Running a Single Test Case / Method
-
-Use `-only-testing` / `-skip-testing` with XCTest identifiers:
-
+### Run All Tests
 ```bash
-# Single test class (unit)
-xcodebuild \
-  -scheme SpaceSwap \
+# Unit tests
+xcodebuild -scheme SpaceSwap \
   -destination 'platform=iOS Simulator,name=iPhone 16,OS=latest' \
-  test \
-  -only-testing:SpaceSwapTests/SpaceSwapTests
+  test -only-testing:SpaceSwapTests
 
-# Single test method (unit)
-xcodebuild \
-  -scheme SpaceSwap \
+# UI tests
+xcodebuild -scheme SpaceSwap \
   -destination 'platform=iOS Simulator,name=iPhone 16,OS=latest' \
-  test \
-  -only-testing:SpaceSwapTests/SpaceSwapTests/testExample
-
-# Single UI test class
-xcodebuild \
-  -scheme SpaceSwap \
-  -destination 'platform=iOS Simulator,name=iPhone 16,OS=latest' \
-  test \
-  -only-testing:SpaceSwapUITests/SpaceSwapUITests
-
-# Single UI test method
-xcodebuild \
-  -scheme SpaceSwap \
-  -destination 'platform=iOS Simulator,name=iPhone 16,OS=latest' \
-  test \
-  -only-testing:SpaceSwapUITests/SpaceSwapUITests/testExample
+  test -only-testing:SpaceSwapUITests
 ```
 
-Replace `iPhone 16` and `OS=latest` with available simulators if needed.
+### Run Single Test
+```bash
+# Single test class
+xcodebuild -scheme SpaceSwap \
+  -destination 'platform=iOS Simulator,name=iPhone 16,OS=latest' \
+  test -only-testing:SpaceSwapTests/SpaceSwapTests
 
-### 2.3 Xcode UI
-- Scheme: `SpaceSwap`.
-- Use the standard Test (⌘U) / Run (⌘R) flows.
-- Configure which tests to run via the Test navigator; agents should not assume custom schemes exist.
+# Single test method
+xcodebuild -scheme SpaceSwap \
+  -destination 'platform=iOS Simulator,name=iPhone 16,OS=latest' \
+  test -only-testing:SpaceSwapTests/SpaceSwapTests/testExample
+```
 
-## 3. Linting, Formatting, and Tools
+## Linting & Formatting
+No SwiftLint/SwiftFormat configured. Rely on Xcode compiler diagnostics.
 
-- No repo-level config detected for:
-  - SwiftLint (`.swiftlint.yml` / `.swiftlint.yaml`).
-  - SwiftFormat (`.swiftformat`).
-  - EditorConfig (`.editorconfig`).
-  - SPM (`Package.swift`).
-- Therefore, default to Xcode/Swift compiler diagnostics.
+## Code Style
 
-If you introduce SwiftLint / SwiftFormat or SPM later, update this section with:
-- Installation / invocation commands.
-- Locations of config files.
+### Architecture Pattern
+- **MVVM**: `View` + `ViewModel` per feature
+- **Services**: Protocol-based dependency injection
+- **Persistence**: SwiftData `@Model` for records
 
-## 4. Code Style & Conventions (Swift / SwiftUI)
+### Naming
+| Element | Convention | Example |
+|---------|------------|---------|
+| Types | UpperCamelCase | `HomeViewModel`, `PhotoAsset` |
+| Functions/Variables | lowerCamelCase | `startScan()`, `scannedAssets` |
+| Protocols | Suffix with `Protocol` | `PhotoLibraryServiceProtocol` |
+| Test classes | Suffix with `Tests` | `SpaceSwapTests` |
+| Test methods | Prefix with `test` | `testExample` |
 
-These are conventions for agents to follow; keep them consistent across new code.
-
-### 4.1 Imports
-- Minimal imports; prefer `import SwiftUI` at top for views.
-- Avoid wildcard or redundant imports (Swift does not support `*`, but avoid unused frameworks).
-- Group imports in single block, no blank lines between them unless separating Apple vs third-party (none yet).
-
-### 4.2 Types & Optionals
-- Prefer explicit types for public API and stored properties, rely on inference for obvious locals.
-- Avoid force unwraps (`!`) and `try!` in production paths.
-- For UI tests and sample code, `!` should still be minimized; prefer safe optional binding:
-
+### Imports
 ```swift
-if let value = optionalValue {
-    // use value
+import SwiftUI      // Views
+import Foundation   // Non-UI code
+import Photos       // Photo library access
+import SwiftData    // Persistence
+import Combine      // Reactive (ViewModels)
+```
+Group Apple frameworks first, third-party below (none yet).
+
+### ViewModels
+```swift
+@MainActor
+final class HomeViewModel: ObservableObject {
+    @Published var isScanning = false
+    private let photoLibraryService: PhotoLibraryServiceProtocol
+    
+    init(photoLibraryService: PhotoLibraryServiceProtocol = PhotoLibraryService()) {
+        self.photoLibraryService = photoLibraryService
+    }
+}
+```
+- Mark `@MainActor` for UI-bound logic
+- Use `@Published` for observable state
+- Inject dependencies via protocols with defaults
+
+### Views
+```swift
+public struct HomeView: View {
+    @StateObject private var viewModel = HomeViewModel()
+    
+    public var body: some View { ... }
+}
+```
+- Use `@StateObject` for owned ViewModels
+- Extract subviews when complexity grows
+- Prefer computed properties over duplicated state
+
+### Services
+```swift
+protocol PhotoLibraryServiceProtocol {
+    func fetchLargeVideos(minSize: Int64) async throws -> [PhotoAsset]
+}
+
+final class PhotoLibraryService: PhotoLibraryServiceProtocol { ... }
+```
+- Define protocols for all services
+- Use `async throws` for fallible async operations
+- Prefer `withCheckedThrowingContinuation` for callback-to-async bridges
+
+### Models
+```swift
+// Value type for runtime data
+struct PhotoAsset: Identifiable, Hashable {
+    let id: String
+    let fileSize: Int64
+}
+
+// SwiftData model for persistence
+@Model
+final class CompressionRecord {
+    var id: UUID
+    var originalSize: Int64
 }
 ```
 
-### 4.3 Naming
-- Types: `UpperCamelCase` (`SpaceSwapApp`, `ContentView`).
-- Methods, functions, variables: `lowerCamelCase`.
-- Test classes end with `Tests` (e.g., `SpaceSwapTests`, `SpaceSwapUITests`).
-- Test methods start with `test` and describe behavior: `testExample`, `testLaunchingAppShowsHome`.
+### Error Handling
+- Use `do { try ... } catch { ... }` — never empty catch blocks
+- Surface errors to UI via `@Published var error: Error?`
+- Avoid `try!` and force unwraps in production code
+- Use `fatalError` only for truly unrecoverable programmer errors
 
-### 4.4 SwiftUI Structure
-- `SpaceSwapApp.swift` contains the `@main` app struct and scene hierarchy.
-- `ContentView.swift` is the entry view; keep it lightweight.
-- Prefer small focused views over monoliths; extract subviews when complexity grows.
+### Async/Await
+```swift
+func startScan() {
+    scanTask = Task {
+        do {
+            let assets = try await photoLibraryService.fetchLargeVideos(minSize: minSize)
+            await MainActor.run { self.scannedAssets = assets }
+        } catch {
+            await MainActor.run { self.error = error }
+        }
+    }
+}
+```
+- Use `Task` for async work from synchronous context
+- Use `Task.checkCancellation()` for cancellable operations
+- Dispatch UI updates via `MainActor.run { }`
 
-Recommended patterns:
-- Use `@State`, `@Binding`, `@ObservedObject`, `@StateObject` appropriately; avoid global state.
-- Derive computed properties instead of duplicating state.
-
-### 4.5 Error Handling
-- Use Swift `throw` / `do { try ... } catch { ... }` for recoverable failures.
-- Never leave `catch {}` blocks empty; log or assert with minimal information.
-- For UI-level failures, surface via user-visible state rather than `fatalError`, unless truly unrecoverable.
-
-### 4.6 Testing Conventions
-- Use `XCTestCase` subclasses under `SpaceSwapTests` / `SpaceSwapUITests`.
-- Prefer `XCTAssertEqual`, `XCTAssertTrue`, etc. with messages that clarify intent.
-- UI tests use `XCUIApplication` and queries; avoid brittle element hierarchies when possible.
-
-## 5. File & Project Organization
-
-- Keep app code under `SpaceSwap/`.
-- Keep test-only helpers under the corresponding `SpaceSwapTests/` or `SpaceSwapUITests/` folders.
-- Assets remain in `Assets.xcassets`; avoid hard‑coding asset names in many places—wrap in simple helpers if needed.
-- If you add new feature groups, prefer folders under `SpaceSwap/` like `Features/`, `Components/`, `Services/` rather than flattening everything.
-
-## 6. CI / Automation
-
-- No `.github/workflows`, `Fastfile`, or other CI/automation config found.
-- If adding CI later (GitHub Actions, Fastlane, etc.), document:
-  - Primary workflow entry file.
-  - Default build/test matrix.
-  - Any required environment variables or secrets.
-
-## 7. Copilot / Cursor Rules
-
-- No Cursor rules found in `.cursor/rules/` or `.cursorrules`.
-- No Copilot instruction file found at `.github/copilot-instructions.md`.
-- Agents should therefore follow this `AGENTS.md` as the primary guidance.
-
-## 8. Agent Working Agreements
-
-- Do not introduce new dependencies or modules without clear justification.
-- Match existing target structure; if you create new targets, update `SpaceSwap.xcodeproj` via Xcode, not by hand‑editing `project.pbxproj`.
-- Keep changes buildable with `xcodebuild -scheme SpaceSwap build`.
-- When adding tests, ensure they are runnable individually via `-only-testing` identifiers.
-
-## 9. Git 提交规范
-
-本项目推荐使用「中括号标签」风格的提交信息，方便一眼看出提交类型。
-
-- 结构：`[tag] 简要描述`。
-- tag 与常见提交类型一一对应：
-- 常用 tag：
-  - `[feature]`  新功能（≈ feat）
-  - `[bugfix]`   修复 bug（≈ fix）
-  - `[docs]`     文档（≈ docs）
-  - `[style]`    风格 / UI 调整（≈ style）
-  - `[refactor]` 重构（≈ refactor）
-  - `[test]`     测试相关（≈ test）
-  - `[chore]`    杂项（≈ chore）
-
-示例：
-
-```text
-[feature] 支持系统相册大体积视频压缩
-[bugfix] 修复相册权限变更后列表不刷新的问题
-[docs] 补充 SpaceSwap 压缩策略说明
-[style] 优化压缩进度指示器的 UI 展示
+### Extensions
+Place in `Shared/Extensions/` with naming: `{Type}+{Purpose}.swift`
+```swift
+// Int64+Formatting.swift
+extension Int64 {
+    var formattedBytes: String { ... }
+}
 ```
 
-**注意：**
-- 一个提交尽量只做一类事情，对应一个清晰的 type / tag。
-- 提交信息用英文或中文均可，但要能看出「做了什么」而不是只写「update」「fix」。
+## Git Commit Style
+使用中括号标签风格：`[tag] 简要描述`
+
+| Tag | 用途 |
+|-----|------|
+| `[feature]` | 新功能 |
+| `[bugfix]` | 修复 bug |
+| `[refactor]` | 重构 |
+| `[style]` | UI/样式调整 |
+| `[docs]` | 文档 |
+| `[test]` | 测试 |
+| `[chore]` | 杂项 |
+
+```
+[feature] 支持系统相册大体积视频压缩
+[bugfix] 修复相册权限变更后列表不刷新的问题
+```
+
+## Agent Rules
+1. **Do not** introduce dependencies without justification
+2. **Do not** hand-edit `project.pbxproj` — use Xcode
+3. **Match** existing patterns (MVVM, protocol injection, async/await)
+4. **Keep** changes buildable: `xcodebuild -scheme SpaceSwap build`
+5. **Verify** tests pass after changes
+6. **Follow** the commit style above
