@@ -33,7 +33,7 @@ public struct HomeView: View {
     }
     
     public var body: some View {
-        NavigationView {
+        NavigationStack {
             VStack(spacing: 20) {
                 VStack(spacing: 16) {
                     Text("Space Swap")
@@ -107,57 +107,52 @@ public struct HomeView: View {
                 
                 // Results List
                 if !viewModel.scannedAssets.isEmpty {
-                    List(sortedAssets) { asset in
-                        NavigationLink(destination: CompressionView(asset: asset)) {
-                            HStack {
-                                RoundedRectangle(cornerRadius: 8)
-                                    .fill(Color.gray.opacity(0.3))
-                                    .frame(width: 60, height: 60)
-                                    .overlay(
-                                        Image(systemName: "video.fill")
-                                            .foregroundColor(.white)
-                                    )
-                                
-                                VStack(alignment: .leading, spacing: 4) {
-                                    Text("Video")
-                                        .font(.headline)
-                                    Text(asset.fileSize.formattedBytes)
-                                        .font(.subheadline)
-                                        .foregroundColor(.secondary)
-                                    Text("Duration: \(asset.duration.formattedDuration)")
-                                        .font(.caption)
-                                        .foregroundColor(.secondary)
-                                }
-                                
-                                Spacer()
-                                
-                                if asset.isCloudAsset {
-                                    Image(systemName: "icloud")
-                                        .foregroundColor(.blue)
+                    ScrollView {
+                        LazyVStack(spacing: 0) {
+                            ForEach(sortedAssets) { asset in
+                                NavigationLink(destination: CompressionView(asset: asset)) {
+                                    HStack {
+                                        RoundedRectangle(cornerRadius: 8)
+                                            .fill(Color.gray.opacity(0.3))
+                                            .frame(width: 60, height: 60)
+                                            .overlay(
+                                                Image(systemName: "video.fill")
+                                                    .foregroundColor(.white)
+                                            )
+                                        
+                                        VStack(alignment: .leading, spacing: 4) {
+                                            Text("Video")
+                                                .font(.headline)
+                                            Text(asset.fileSize.formattedBytes)
+                                                .font(.subheadline)
+                                                .foregroundColor(.secondary)
+                                            Text("Duration: \(asset.duration.formattedDuration)")
+                                                .font(.caption)
+                                                .foregroundColor(.secondary)
+                                        }
+                                        
+                                        Spacer()
+                                        
+                                        if asset.isCloudAsset {
+                                            Image(systemName: "icloud")
+                                                .foregroundColor(.blue)
+                                        }
+                                    }
+                                    .padding(.vertical, 8)
+                                    .padding(.horizontal)
                                 }
                             }
-                            .padding(.vertical, 8)
                         }
                     }
-                    .listStyle(.plain)
+                    .frame(maxHeight: 400)
                 } else if viewModel.isScanning {
                     Spacer()
                 } else {
                     Spacer()
-                }
             }
-            .navigationBarHidden(true)
-            .alert("Scan Error", isPresented: $viewModel.showErrorAlert, actions: {
-                Button("OK") {
-                    viewModel.clearResults()
-                }
-            }, message: {
-                if let error = viewModel.error {
-                    Text(error.localizedDescription)
-                }
-            })
         }
     }
+}
 
 #Preview {
     HomeView()
