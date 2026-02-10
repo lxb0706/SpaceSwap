@@ -34,8 +34,7 @@ public struct HomeView: View {
     
     public var body: some View {
         NavigationView {
-        NavigationView {
-            VStack(spacing: 0) {
+            VStack(spacing: 20) {
                 VStack(spacing: 16) {
                     Text("Space Swap")
                         .font(.largeTitle)
@@ -159,7 +158,6 @@ public struct HomeView: View {
             })
         }
     }
-}
 
 #Preview {
     HomeView()

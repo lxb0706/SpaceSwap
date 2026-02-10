@@ -15,7 +15,7 @@ struct CompressionView: View {
     @State private var selectedQuality: CompressionQuality = .medium
     
     var body: some View {
-        NavigationView {
+        NavigationStack {
             VStack(spacing: 24) {
                 // Asset Preview
                 VStack(spacing: 16) {
