@@ -7,6 +7,7 @@
 
 import SwiftData
 import Combine
+import Foundation
 
 protocol PersistenceServiceProtocol {
     func save(record: CompressionRecord) async throws
@@ -22,14 +23,23 @@ final class PersistenceService: PersistenceServiceProtocol {
         self.modelContext = modelContext
     }
     
+    convenience init() {
+        let schema = Schema([CompressionRecord.self])
+        let modelConfiguration = ModelConfiguration(schema: schema, isStoredInMemoryOnly: false)
+        let modelContainer = try! ModelContainer(for: schema, configurations: [modelConfiguration])
+        let modelContext = ModelContext(modelContainer)
+        self.init(modelContext: modelContext)
+    }
+    
     func save(record: CompressionRecord) async throws {
         modelContext.insert(record)
         try modelContext.save()
     }
     
     func fetchAll() async throws -> [CompressionRecord] {
-        let descriptor = FetchDescriptor<CompressionRecord>(sortBy: [SortDescriptor(\.date, order: .reverse)])
-        return try modelContext.fetch(descriptor)
+        let descriptor = FetchDescriptor<CompressionRecord>()
+        let records = try modelContext.fetch(descriptor)
+        return records.sorted { $0.date > $1.date }
     }
     
     func delete(record: CompressionRecord) async throws {
@@ -39,11 +49,10 @@ final class PersistenceService: PersistenceServiceProtocol {
     
     var totalSavedSpace: Int64 {
         get async throws {
-            let descriptor = FetchDescriptor<CompressionRecord>(
-                predicate: #Predicate { $0.status == 1 }
-            )
+            let descriptor = FetchDescriptor<CompressionRecord>()
             let records = try modelContext.fetch(descriptor)
-            return records.reduce(0) { $0 + ($1.originalSize - $1.compressedSize) }
+            let successfulRecords = records.filter { $0.status == 1 }
+            return successfulRecords.reduce(0) { $0 + ($1.originalSize - $1.compressedSize) }
         }
     }
 }
