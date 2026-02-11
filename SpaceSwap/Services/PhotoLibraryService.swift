@@ -6,6 +6,7 @@
 //
 
 import Photos
+import Foundation
 
 enum CompressionQuality: String, CaseIterable {
     case low = "Low"
@@ -34,24 +35,26 @@ final class PhotoLibraryService: PhotoLibraryServiceProtocol {
         }
         
         return try await withCheckedThrowingContinuation { continuation in
-            let fetchOptions = PHFetchOptions()
-            fetchOptions.predicate = NSPredicate(format: "mediaType = %d", PHAssetMediaType.video.rawValue)
-            fetchOptions.sortDescriptors = [NSSortDescriptor(key: "creationDate", ascending: false)]
-            
-            let fetchResult = PHAsset.fetchAssets(with: fetchOptions)
-            var assets: [PhotoAsset] = []
-            
-            fetchResult.enumerateObjects { asset, _, _ in
-                if let resource = PHAssetResource.assetResources(for: asset).first(where: { $0.type == .video }) {
-                    let size = (resource.value(forKey: "fileSize") as? NSNumber)?.int64Value ?? 0
-                    if size >= minSize {
-                        let photoAsset = PhotoAsset(phAsset: asset, fileSize: size)
-                        assets.append(photoAsset)
+            DispatchQueue.global(qos: .userInitiated).async {
+                let fetchOptions = PHFetchOptions()
+                fetchOptions.predicate = NSPredicate(format: "mediaType = %d", PHAssetMediaType.video.rawValue)
+                fetchOptions.sortDescriptors = [NSSortDescriptor(key: "creationDate", ascending: false)]
+
+                let fetchResult = PHAsset.fetchAssets(with: fetchOptions)
+                var assets: [PhotoAsset] = []
+
+                fetchResult.enumerateObjects { asset, _, _ in
+                    if let resource = PHAssetResource.assetResources(for: asset).first(where: { $0.type == .video }) {
+                        let size = (resource.value(forKey: "fileSize") as? NSNumber)?.int64Value ?? 0
+                        if size >= minSize {
+                            let photoAsset = PhotoAsset(phAsset: asset, fileSize: size)
+                            assets.append(photoAsset)
+                        }
                     }
                 }
+
+                continuation.resume(returning: assets)
             }
-            
-            continuation.resume(returning: assets)
         }
     }
     

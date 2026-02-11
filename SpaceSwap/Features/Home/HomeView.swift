@@ -12,17 +12,19 @@ import UIKit
 
 public struct HomeView: View {
     @StateObject private var viewModel = HomeViewModel()
-    @State private var sortOption: SortOption = .sizeDescending
+    @State private var sortOption: SortOption = .dateNewest
     @State private var pendingScanStart = false
-    @State private var scanRippleAnimating = false
     @State private var canShowResults = false
     @State private var showDockingControl = true
     @State private var showCompletionState = false
     @State private var isDismissingScanControl = false
     @State private var showToolbarRescanButton = false
     @State private var shouldFlipProgress = false
+    @State private var ripplePhase = false
     @State private var isNavBarCollapsed = false
     @State private var resultsTopBaseline: CGFloat?
+    @State private var showStopScanAlert = false
+    @State private var shouldSkipFinishTransition = false
     @State private var visibleAssetIDs: Set<String> = []
     @State private var revealTask: Task<Void, Never>?
     @State private var transitionTask: Task<Void, Never>?
@@ -53,13 +55,26 @@ public struct HomeView: View {
 
     private var scanProgressPercent: Int {
         if isScanningVisualActive {
-            return max(1, min(100, Int(viewModel.scanProgress * 100)))
+            return max(0, min(100, Int(viewModel.scanProgress * 100)))
         }
         return max(0, min(100, Int(viewModel.scanProgress * 100)))
     }
 
     private var isScanningVisualActive: Bool {
         viewModel.isScanning || pendingScanStart
+    }
+
+    private var scanEnergy: Double {
+        guard isScanningVisualActive else { return 0.0 }
+        let progress = min(max(viewModel.scanProgress, 0.0), 1.0)
+        return 0.45 + progress * 0.55
+    }
+
+    private func startScanEffects() {
+        ripplePhase = false
+        withAnimation(.easeInOut(duration: 2.4).repeatForever(autoreverses: true)) {
+            ripplePhase = true
+        }
     }
 
     public var body: some View {
@@ -75,7 +90,6 @@ public struct HomeView: View {
                         .animation(.easeInOut(duration: 0.35), value: isDismissingScanControl)
                         .animation(.easeInOut(duration: 0.25), value: viewModel.scanProgress)
                         .animation(.easeInOut(duration: 0.2), value: showCompletionState)
-                        .allowsHitTesting(!viewModel.isScanning)
                 }
             }
             .navigationTitle("")
@@ -105,7 +119,6 @@ public struct HomeView: View {
             .onChange(of: viewModel.isScanning) { oldValue, newValue in
                 if !oldValue && newValue {
                     pendingScanStart = false
-                    scanRippleAnimating = true
                     canShowResults = false
                     isNavBarCollapsed = false
                     transitionTask?.cancel()
@@ -119,7 +132,10 @@ public struct HomeView: View {
 
                 if oldValue && !newValue {
                     pendingScanStart = false
-                    scanRippleAnimating = false
+                    if shouldSkipFinishTransition {
+                        shouldSkipFinishTransition = false
+                        return
+                    }
                     handleScanFinished()
                 }
             }
@@ -137,6 +153,25 @@ public struct HomeView: View {
                     resultsTopBaseline = nil
                     isNavBarCollapsed = false
                 }
+            }
+            .onChange(of: isScanningVisualActive) { _, isActive in
+                if isActive {
+                    startScanEffects()
+                } else {
+                    var transaction = Transaction()
+                    transaction.disablesAnimations = true
+                    withTransaction(transaction) {
+                        ripplePhase = false
+                    }
+                }
+            }
+            .alert("Stop scanning now?", isPresented: $showStopScanAlert) {
+                Button("Cancel", role: .cancel) {}
+                Button("Confirm Stop", role: .destructive) {
+                    stopScanAndReset()
+                }
+            } message: {
+                Text("Current scan progress will be discarded and found results will be cleared.")
             }
         }
     }
@@ -260,7 +295,11 @@ public struct HomeView: View {
 
     private var scanControl: some View {
         Button {
-            triggerScan()
+            if isScanningVisualActive {
+                showStopScanAlert = true
+            } else {
+                triggerScan()
+            }
         } label: {
             ZStack {
                 Circle()
@@ -279,7 +318,7 @@ public struct HomeView: View {
                     .frame(width: 178, height: 178)
 
                 Circle()
-                    .trim(from: 0.0, to: showCompletionState ? 1.0 : max(viewModel.scanProgress, isScanningVisualActive ? 0.01 : 0.0))
+                    .trim(from: 0.0, to: showCompletionState ? 1.0 : max(viewModel.scanProgress, 0.0))
                     .stroke(
                         Color.cyan,
                         style: StrokeStyle(lineWidth: 9, lineCap: .round, lineJoin: .round)
@@ -290,14 +329,11 @@ public struct HomeView: View {
                     .opacity(isScanningVisualActive || showCompletionState ? 1.0 : 0.35)
 
                 Circle()
-                    .stroke(Color.blue.opacity(0.35), lineWidth: 2)
-                    .frame(width: 190, height: 190)
-                    .scaleEffect(scanRippleAnimating ? 1.1 : 0.92)
-                    .opacity(scanRippleAnimating ? 0.22 : 0.0)
-                    .animation(
-                        .easeInOut(duration: 1.0).repeatForever(autoreverses: true),
-                        value: scanRippleAnimating
-                    )
+                    .stroke(Color.cyan.opacity(0.62), lineWidth: 3)
+                    .frame(width: 182, height: 182)
+                    .scaleEffect(ripplePhase ? 1.1 : 0.95)
+                    .opacity(isScanningVisualActive ? 0.28 + scanEnergy * 0.2 : 0.0)
+                    .blur(radius: ripplePhase ? 0.4 : 0)
 
                 VStack(spacing: 6) {
                     if showCompletionState {
@@ -340,11 +376,16 @@ public struct HomeView: View {
         isNavBarCollapsed = false
         resultsTopBaseline = nil
         pendingScanStart = true
-        scanRippleAnimating = true
+        startScanEffects()
         showCompletionState = false
         isDismissingScanControl = false
         visibleAssetIDs = []
-        viewModel.startScan()
+        Task { @MainActor in
+            // Let the view render 1% state first, then start scanning.
+            await Task.yield()
+            guard pendingScanStart else { return }
+            viewModel.startScan()
+        }
     }
 
     private func handleScanFinished() {
@@ -383,6 +424,27 @@ public struct HomeView: View {
             showToolbarRescanButton = true
             startStaggerReveal(for: sortedAssets.map(\.id))
         }
+    }
+
+    private func stopScanAndReset() {
+        shouldSkipFinishTransition = true
+        transitionTask?.cancel()
+        revealTask?.cancel()
+        viewModel.cancelScan()
+        viewModel.clearResults()
+
+        withAnimation(.easeInOut(duration: 0.2)) {
+            showDockingControl = true
+            showCompletionState = false
+            isDismissingScanControl = false
+            canShowResults = false
+            showToolbarRescanButton = false
+            isNavBarCollapsed = false
+        }
+
+        resultsTopBaseline = nil
+        pendingScanStart = false
+        visibleAssetIDs = []
     }
 
     private func startStaggerReveal(for ids: [String]) {

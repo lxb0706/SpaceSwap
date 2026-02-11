@@ -34,7 +34,7 @@ final class HomeViewModel: ObservableObject {
         guard !isScanning else { return }
         
         isScanning = true
-        scanProgress = 0.01
+        scanProgress = 0.0
         scanningMatchedCount = 0
         scannedAssets = []
         error = nil
@@ -60,6 +60,9 @@ final class HomeViewModel: ObservableObject {
                     self.scanProgress = 1.0
                 }
             } catch {
+                if error is CancellationError {
+                    return
+                }
                 await MainActor.run {
                     self.error = error
                     self.isScanning = false
