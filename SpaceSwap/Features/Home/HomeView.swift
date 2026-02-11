@@ -471,18 +471,10 @@ public struct HomeView: View {
     ) -> some View {
         Button(action: action) {
             Image(systemName: symbol)
-                .font(.system(size: 15, weight: .semibold))
-                .foregroundStyle(Color.black.opacity(0.8))
-                .frame(width: 34, height: 34)
-                .background {
-                    Circle()
-                        .fill(Color.white.opacity(0.95))
-                }
-                .overlay(
-                    Circle()
-                        .stroke(Color.black.opacity(0.08), lineWidth: 0.9)
-                )
-                .shadow(color: Color.black.opacity(0.12), radius: 8, x: 0, y: 3)
+                .font(.system(size: 17, weight: .semibold))
+                .foregroundStyle(Color.primary)
+                .frame(width: 30, height: 30)
+                .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
         .accessibilityLabel(accessibilityLabel)
