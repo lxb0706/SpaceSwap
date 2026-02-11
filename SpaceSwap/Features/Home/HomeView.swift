@@ -7,14 +7,22 @@
 
 import SwiftUI
 import Photos
+import CoreLocation
+import UIKit
 
 public struct HomeView: View {
     @StateObject private var viewModel = HomeViewModel()
     @State private var sortOption: SortOption = .sizeDescending
-    @State private var isPulseAnimating = false
+    @State private var pendingScanStart = false
+    @State private var scanRippleAnimating = false
+    @State private var canShowResults = false
     @State private var showDockingControl = true
-    @State private var dockToTopRight = false
     @State private var showCompletionState = false
+    @State private var isDismissingScanControl = false
+    @State private var showToolbarRescanButton = false
+    @State private var shouldFlipProgress = false
+    @State private var visibleAssetIDs: Set<String> = []
+    @State private var revealTask: Task<Void, Never>?
     @State private var transitionTask: Task<Void, Never>?
 
     enum SortOption: String, CaseIterable {
@@ -42,58 +50,78 @@ public struct HomeView: View {
     }
 
     private var scanProgressPercent: Int {
-        max(0, min(100, Int(viewModel.scanProgress * 100)))
+        if isScanningVisualActive {
+            return max(1, min(100, Int(viewModel.scanProgress * 100)))
+        }
+        return max(0, min(100, Int(viewModel.scanProgress * 100)))
+    }
+
+    private var isScanningVisualActive: Bool {
+        viewModel.isScanning || pendingScanStart
     }
 
     public var body: some View {
         NavigationStack {
-            GeometryReader { proxy in
-                ZStack(alignment: .topLeading) {
-                    content
+            ZStack {
+                content
 
-                    if showDockingControl {
-                        scanControl
-                            .position(scanControlPosition(in: proxy))
-                            .scaleEffect(dockToTopRight ? 0.32 : 1.0)
-                            .opacity(dockToTopRight ? 0.88 : 1.0)
-                            .animation(.spring(response: 0.55, dampingFraction: 0.82), value: dockToTopRight)
-                            .animation(.easeInOut(duration: 0.25), value: viewModel.scanProgress)
-                            .animation(.easeInOut(duration: 0.2), value: showCompletionState)
-                            .allowsHitTesting(!viewModel.isScanning && !dockToTopRight)
-                    }
-                }
-                .onAppear {
-                    isPulseAnimating = true
+                if showDockingControl {
+                    scanControl
+                        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
+                        .scaleEffect(isDismissingScanControl ? 0.78 : 1.0)
+                        .opacity(isDismissingScanControl ? 0.0 : 1.0)
+                        .animation(.easeInOut(duration: 0.35), value: isDismissingScanControl)
+                        .animation(.easeInOut(duration: 0.25), value: viewModel.scanProgress)
+                        .animation(.easeInOut(duration: 0.2), value: showCompletionState)
+                        .allowsHitTesting(!viewModel.isScanning)
                 }
             }
-            .navigationTitle("Home")
+            .navigationTitle("")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
-                if !viewModel.isScanning, !viewModel.scannedAssets.isEmpty {
-                    ToolbarItem(placement: .topBarTrailing) {
-                        Button {
+                if showToolbarRescanButton && !viewModel.isScanning && !viewModel.scannedAssets.isEmpty {
+                    ToolbarItem(placement: .topBarLeading) {
+                        toolbarIconButton(symbol: "arrow.clockwise", accessibilityLabel: "Rescan") {
                             triggerScan()
-                        } label: {
-                            Image(systemName: "arrow.clockwise.circle.fill")
-                                .font(.title3)
-                                .symbolRenderingMode(.hierarchical)
                         }
-                        .accessibilityLabel("Rescan Photo Library")
+                    }
+                }
+
+                if !viewModel.isScanning {
+                    ToolbarItem(placement: .topBarTrailing) {
+                        toolbarIconButton(symbol: "slider.horizontal.3", accessibilityLabel: "Settings") {
+                            // Settings entry point placeholder.
+                        }
                     }
                 }
             }
             .onChange(of: viewModel.isScanning) { oldValue, newValue in
                 if !oldValue && newValue {
+                    pendingScanStart = false
+                    scanRippleAnimating = true
+                    canShowResults = false
                     transitionTask?.cancel()
                     withAnimation(.spring(response: 0.45, dampingFraction: 0.8)) {
                         showDockingControl = true
-                        dockToTopRight = false
                         showCompletionState = false
+                        isDismissingScanControl = false
                     }
+                    showToolbarRescanButton = false
                 }
 
                 if oldValue && !newValue {
+                    pendingScanStart = false
+                    scanRippleAnimating = false
                     handleScanFinished()
+                }
+            }
+            .onChange(of: scanProgressPercent) { _, _ in
+                guard isScanningVisualActive else { return }
+                shouldFlipProgress.toggle()
+            }
+            .onChange(of: viewModel.scannedAssets) { _, newValue in
+                if canShowResults {
+                    startStaggerReveal(for: sortedAssets.map(\.id))
                 }
             }
         }
@@ -102,22 +130,33 @@ public struct HomeView: View {
     private var content: some View {
         VStack(spacing: 16) {
             if viewModel.scannedAssets.isEmpty {
-                Spacer()
                 VStack(spacing: 10) {
                     Text("Space Swap")
                         .font(.largeTitle)
                         .fontWeight(.bold)
-                    Text(viewModel.isScanning ? "Scanning your photo library..." : "Scan your photo library for large videos")
+                    Text(isScanningVisualActive ? "Scanning your photo library..." : "Scan your photo library for large videos")
                         .font(.subheadline)
                         .foregroundColor(.secondary)
                         .multilineTextAlignment(.center)
-                    if viewModel.isScanning {
+                    if isScanningVisualActive {
+                        HStack(spacing: 4) {
+                            Text("Matched")
+                            Text("\(viewModel.scanningMatchedCount)")
+                                .fontWeight(.bold)
+                                .monospacedDigit()
+                                .frame(minWidth: 56, alignment: .trailing)
+                                .contentTransition(.numericText())
+                            Text("videos")
+                        }
+                        .font(.caption)
+                        .foregroundColor(.secondary)
                         Text("Progress updates as assets are analyzed")
                             .font(.caption)
                             .foregroundColor(.secondary)
                     }
                 }
                 .padding(.horizontal, 24)
+                .padding(.top, 72)
                 Spacer()
             } else {
                 VStack(spacing: 12) {
@@ -139,20 +178,32 @@ public struct HomeView: View {
                     }
                     .padding(.horizontal, 16)
 
-                    ScrollView {
-                        LazyVStack(spacing: 12) {
-                            ForEach(sortedAssets) { asset in
-                                NavigationLink(destination: CompressionView(asset: asset)) {
-                                    AssetRowView(asset: asset)
+                    if canShowResults {
+                        ScrollView {
+                            LazyVStack(spacing: 12) {
+                                ForEach(sortedAssets.filter { visibleAssetIDs.contains($0.id) }) { asset in
+                                    NavigationLink(destination: CompressionView(asset: asset)) {
+                                        AssetRowView(asset: asset)
+                                    }
+                                    .buttonStyle(.plain)
+                                    .transition(.move(edge: .bottom).combined(with: .opacity))
                                 }
-                                .buttonStyle(.plain)
                             }
+                            .animation(.easeOut(duration: 0.28), value: visibleAssetIDs)
+                            .padding(.horizontal, 16)
+                            .padding(.bottom, 100)
                         }
-                        .padding(.horizontal, 16)
-                        .padding(.bottom, 100)
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                        .ignoresSafeArea(.container, edges: .bottom)
+                    } else {
+                        VStack(spacing: 8) {
+                            ProgressView()
+                            Text("Finalizing scan...")
+                                .font(.caption)
+                                .foregroundColor(.secondary)
+                        }
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
                     }
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    .ignoresSafeArea(.container, edges: .bottom)
                 }
             }
         }
@@ -167,7 +218,7 @@ public struct HomeView: View {
                 Circle()
                     .fill(
                         LinearGradient(
-                            colors: showCompletionState ? [Color.green, Color.teal] : [Color.blue, Color.cyan],
+                            colors: [Color.blue, Color.cyan],
                             startPoint: .topLeading,
                             endPoint: .bottomTrailing
                         )
@@ -180,32 +231,43 @@ public struct HomeView: View {
                     .frame(width: 178, height: 178)
 
                 Circle()
-                    .trim(from: 0.0, to: showCompletionState ? 1.0 : max(viewModel.scanProgress, viewModel.isScanning ? 0.01 : 0.0))
+                    .trim(from: 0.0, to: showCompletionState ? 1.0 : max(viewModel.scanProgress, isScanningVisualActive ? 0.01 : 0.0))
                     .stroke(
-                        showCompletionState ? Color.green : Color.cyan,
+                        Color.cyan,
                         style: StrokeStyle(lineWidth: 9, lineCap: .round, lineJoin: .round)
                     )
                     .frame(width: 178, height: 178)
                     .rotationEffect(.degrees(-90))
                     .shadow(color: Color.cyan.opacity(0.55), radius: 10, x: 0, y: 0)
+                    .opacity(isScanningVisualActive || showCompletionState ? 1.0 : 0.35)
 
                 Circle()
                     .stroke(Color.blue.opacity(0.35), lineWidth: 2)
                     .frame(width: 190, height: 190)
-                    .scaleEffect(isPulseAnimating ? 1.08 : 0.93)
-                    .opacity(isPulseAnimating ? 0.2 : 0.7)
+                    .scaleEffect(scanRippleAnimating ? 1.1 : 0.92)
+                    .opacity(scanRippleAnimating ? 0.22 : 0.0)
                     .animation(
-                        .easeInOut(duration: 1.35).repeatForever(autoreverses: true),
-                        value: isPulseAnimating
+                        .easeInOut(duration: 1.0).repeatForever(autoreverses: true),
+                        value: scanRippleAnimating
                     )
 
                 VStack(spacing: 6) {
                     if showCompletionState {
-                        Image(systemName: "checkmark.circle.fill")
-                            .font(.system(size: 30, weight: .semibold))
-                    } else if viewModel.isScanning {
+                        Image(systemName: "checkmark")
+                            .font(.system(size: 30, weight: .bold))
+                        Text("Done")
+                            .font(.system(size: 18, weight: .bold, design: .rounded))
+                    } else if isScanningVisualActive {
                         Text("\(scanProgressPercent)%")
                             .font(.system(size: 32, weight: .bold, design: .rounded))
+                            .monospacedDigit()
+                            .contentTransition(.numericText())
+                            .rotation3DEffect(
+                                .degrees(shouldFlipProgress ? -12 : 0),
+                                axis: (x: 1, y: 0, z: 0),
+                                perspective: 0.7
+                            )
+                            .animation(.spring(response: 0.28, dampingFraction: 0.62), value: shouldFlipProgress)
                     } else {
                         Image(systemName: "magnifyingglass")
                             .font(.system(size: 28, weight: .semibold))
@@ -214,25 +276,24 @@ public struct HomeView: View {
                     }
                 }
                 .foregroundColor(.white)
+
             }
         }
         .buttonStyle(.plain)
         .scaleEffect(viewModel.isScanning ? 1.02 : 1.0)
     }
 
-    private func scanControlPosition(in proxy: GeometryProxy) -> CGPoint {
-        let center = CGPoint(x: proxy.size.width / 2, y: proxy.size.height / 2)
-        let topRight = CGPoint(x: proxy.size.width - 34, y: proxy.safeAreaInsets.top + 24)
-        return dockToTopRight ? topRight : center
-    }
-
     private func triggerScan() {
         transitionTask?.cancel()
-        withAnimation(.spring(response: 0.45, dampingFraction: 0.78)) {
-            showDockingControl = true
-            dockToTopRight = false
-            showCompletionState = false
-        }
+        revealTask?.cancel()
+        showToolbarRescanButton = false
+        showDockingControl = true
+        canShowResults = false
+        pendingScanStart = true
+        scanRippleAnimating = true
+        showCompletionState = false
+        isDismissingScanControl = false
+        visibleAssetIDs = []
         viewModel.startScan()
     }
 
@@ -240,9 +301,10 @@ public struct HomeView: View {
         guard !viewModel.scannedAssets.isEmpty else {
             withAnimation(.easeInOut(duration: 0.25)) {
                 showCompletionState = false
-                dockToTopRight = false
                 showDockingControl = true
+                isDismissingScanControl = false
             }
+            showToolbarRescanButton = false
             return
         }
 
@@ -251,25 +313,74 @@ public struct HomeView: View {
             withAnimation(.spring(response: 0.32, dampingFraction: 0.72)) {
                 showCompletionState = true
             }
+            let notification = UINotificationFeedbackGenerator()
+            notification.notificationOccurred(.success)
 
-            try? await Task.sleep(nanoseconds: 700_000_000)
+            // Keep "Done" on screen for a full beat before dismissing.
+            try? await Task.sleep(nanoseconds: 1_200_000_000)
 
-            withAnimation(.spring(response: 0.55, dampingFraction: 0.82)) {
-                dockToTopRight = true
+            withAnimation(.easeOut(duration: 0.45)) {
+                isDismissingScanControl = true
             }
+            try? await Task.sleep(nanoseconds: 500_000_000)
 
-            try? await Task.sleep(nanoseconds: 480_000_000)
+            showDockingControl = false
+            showCompletionState = false
+            isDismissingScanControl = false
+            canShowResults = true
+            showToolbarRescanButton = true
+            startStaggerReveal(for: sortedAssets.map(\.id))
+        }
+    }
 
-            withAnimation(.easeOut(duration: 0.25)) {
-                showDockingControl = false
-                showCompletionState = false
+    private func startStaggerReveal(for ids: [String]) {
+        revealTask?.cancel()
+        visibleAssetIDs = []
+
+        guard !ids.isEmpty else { return }
+
+        revealTask = Task { @MainActor in
+            for id in ids {
+                if Task.isCancelled { return }
+                withAnimation(.spring(response: 0.3, dampingFraction: 0.85)) {
+                    visibleAssetIDs.insert(id)
+                }
+                try? await Task.sleep(nanoseconds: 35_000_000)
             }
         }
+    }
+
+    private func toolbarIconButton(
+        symbol: String,
+        accessibilityLabel: String,
+        action: @escaping () -> Void
+    ) -> some View {
+        Button(action: action) {
+            Image(systemName: symbol)
+                .font(.system(size: 15, weight: .semibold))
+                .foregroundStyle(Color.primary)
+                .frame(width: 34, height: 34)
+                .background {
+                    ZStack {
+                        Circle().fill(.ultraThinMaterial)
+                        Circle().fill(Color.white.opacity(0.35))
+                    }
+                }
+                .overlay(
+                    Circle()
+                        .stroke(Color.white.opacity(0.45), lineWidth: 0.8)
+                )
+                .shadow(color: Color.black.opacity(0.12), radius: 5, x: 0, y: 2)
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(accessibilityLabel)
     }
 }
 
 private struct AssetRowView: View {
     let asset: PhotoAsset
+    @State private var resolvedLocationName: String?
+    @State private var didAnimateIn = false
 
     var body: some View {
         HStack(alignment: .top, spacing: 12) {
@@ -281,7 +392,13 @@ private struct AssetRowView: View {
                     .lineLimit(1)
 
                 HStack(spacing: 12) {
-                    Label(asset.fileSize.formattedBytes, systemImage: "internaldrive")
+                    Label {
+                        Text(asset.fileSize.formattedBytes)
+                            .fontWeight(.bold)
+                            .foregroundColor(.blue)
+                    } icon: {
+                        Image(systemName: "internaldrive")
+                    }
                     Label(asset.duration.formattedDuration, systemImage: "clock")
                 }
                 .font(.caption)
@@ -294,8 +411,8 @@ private struct AssetRowView: View {
                 .font(.caption)
                 .foregroundColor(.secondary)
 
-                if let locationText = asset.locationText {
-                    Label(locationText, systemImage: "mappin.and.ellipse")
+                if let displayLocation = displayLocationText {
+                    Label(displayLocation, systemImage: "mappin.and.ellipse")
                         .font(.caption)
                         .foregroundColor(.secondary)
                         .lineLimit(1)
@@ -316,12 +433,53 @@ private struct AssetRowView: View {
         }
         .padding(12)
         .background(Color(.secondarySystemBackground), in: RoundedRectangle(cornerRadius: 14))
+        .opacity(didAnimateIn ? 1.0 : 0.0)
+        .offset(y: didAnimateIn ? 0 : 14)
+        .scaleEffect(didAnimateIn ? 1.0 : 0.985)
+        .onAppear {
+            withAnimation(.easeOut(duration: 0.26)) {
+                didAnimateIn = true
+            }
+        }
+        .onDisappear {
+            didAnimateIn = false
+        }
+        .task(id: asset.id) {
+            await resolveLocationNameIfNeeded()
+        }
+    }
+
+    private var displayLocationText: String? {
+        if let resolvedLocationName {
+            return resolvedLocationName
+        }
+        return asset.locationText
+    }
+
+    private func resolveLocationNameIfNeeded() async {
+        guard let latitude = asset.latitude, let longitude = asset.longitude else {
+            return
+        }
+
+        let locationName = await LocationNameCache.shared.resolveLocationName(
+            latitude: latitude,
+            longitude: longitude
+        )
+
+        guard let locationName else {
+            return
+        }
+
+        await MainActor.run {
+            resolvedLocationName = locationName
+        }
     }
 }
 
 private struct AssetThumbnailView: View {
     let asset: PhotoAsset
     @State private var thumbnail: UIImage?
+    @Environment(\.displayScale) private var displayScale
 
     var body: some View {
         ZStack {
@@ -341,11 +499,71 @@ private struct AssetThumbnailView: View {
         .frame(width: 96, height: 96)
         .clipShape(RoundedRectangle(cornerRadius: 10))
         .task(id: asset.id) {
-            thumbnail = await asset.thumbnail(size: CGSize(width: 240, height: 240))
+            let targetSize = CGSize(
+                width: 96 * displayScale,
+                height: 96 * displayScale
+            )
+            thumbnail = await asset.thumbnail(size: targetSize)
         }
     }
 }
 
 #Preview {
     HomeView()
+}
+
+private actor LocationNameCache {
+    static let shared = LocationNameCache()
+
+    private var cache: [String: String] = [:]
+    private var inflight: [String: Task<String?, Never>] = [:]
+
+    func resolveLocationName(latitude: Double, longitude: Double) async -> String? {
+        let key = String(format: "%.4f,%.4f", latitude, longitude)
+
+        if let cached = cache[key] {
+            return cached
+        }
+
+        if let runningTask = inflight[key] {
+            return await runningTask.value
+        }
+
+        let task = Task<String?, Never> {
+            let geocoder = CLGeocoder()
+            let location = CLLocation(latitude: latitude, longitude: longitude)
+
+            do {
+                let placemarks = try await geocoder.reverseGeocodeLocation(location)
+                guard let placemark = placemarks.first else {
+                    return nil
+                }
+
+                let parts = [
+                    placemark.subLocality,
+                    placemark.locality,
+                    placemark.administrativeArea,
+                    placemark.country
+                ].compactMap { $0 }.filter { !$0.isEmpty }
+
+                guard !parts.isEmpty else {
+                    return nil
+                }
+
+                return parts.joined(separator: ", ")
+            } catch {
+                return nil
+            }
+        }
+
+        inflight[key] = task
+        let result = await task.value
+        inflight[key] = nil
+
+        if let result {
+            cache[key] = result
+        }
+
+        return result
+    }
 }

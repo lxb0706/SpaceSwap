@@ -12,6 +12,7 @@ import Combine
 final class HomeViewModel: ObservableObject {
     @Published var isScanning = false
     @Published var scanProgress: Double = 0.0
+    @Published var scanningMatchedCount: Int = 0
     @Published var scannedAssets: [PhotoAsset] = []
     @Published var error: Error?
     @Published var showErrorAlert = false
@@ -33,7 +34,8 @@ final class HomeViewModel: ObservableObject {
         guard !isScanning else { return }
         
         isScanning = true
-        scanProgress = 0.0
+        scanProgress = 0.01
+        scanningMatchedCount = 0
         scannedAssets = []
         error = nil
         
@@ -43,10 +45,11 @@ final class HomeViewModel: ObservableObject {
                 let assets = try await photoLibraryService.fetchLargeVideos(minSize: minSize)
                 
                 // Simulate progress for UI feedback
-                for (index, asset) in assets.enumerated() {
+                for (index, _) in assets.enumerated() {
                     try Task.checkCancellation()
                     await MainActor.run {
                         self.scanProgress = Double(index + 1) / Double(assets.count)
+                        self.scanningMatchedCount = index + 1
                     }
                     try await Task.sleep(nanoseconds: 50_000_000) // 0.05s delay for smooth animation
                 }
@@ -60,6 +63,7 @@ final class HomeViewModel: ObservableObject {
                 await MainActor.run {
                     self.error = error
                     self.isScanning = false
+                    self.scanningMatchedCount = 0
                     self.showErrorAlert = true
                 }
             }
@@ -71,6 +75,7 @@ final class HomeViewModel: ObservableObject {
         scanTask = nil
         isScanning = false
         scanProgress = 0.0
+        scanningMatchedCount = 0
         error = nil
     }
     
