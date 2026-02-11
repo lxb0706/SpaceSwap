@@ -21,6 +21,8 @@ public struct HomeView: View {
     @State private var isDismissingScanControl = false
     @State private var showToolbarRescanButton = false
     @State private var shouldFlipProgress = false
+    @State private var isNavBarCollapsed = false
+    @State private var resultsTopBaseline: CGFloat?
     @State private var visibleAssetIDs: Set<String> = []
     @State private var revealTask: Task<Void, Never>?
     @State private var transitionTask: Task<Void, Never>?
@@ -78,6 +80,11 @@ public struct HomeView: View {
             }
             .navigationTitle("")
             .navigationBarTitleDisplayMode(.inline)
+            .toolbar(
+                (canShowResults && !viewModel.scannedAssets.isEmpty && isNavBarCollapsed) ? .hidden : .visible,
+                for: .navigationBar
+            )
+            .navigationBarHidden(canShowResults && !viewModel.scannedAssets.isEmpty && isNavBarCollapsed)
             .toolbar {
                 if showToolbarRescanButton && !viewModel.isScanning && !viewModel.scannedAssets.isEmpty {
                     ToolbarItem(placement: .topBarLeading) {
@@ -100,6 +107,7 @@ public struct HomeView: View {
                     pendingScanStart = false
                     scanRippleAnimating = true
                     canShowResults = false
+                    isNavBarCollapsed = false
                     transitionTask?.cancel()
                     withAnimation(.spring(response: 0.45, dampingFraction: 0.8)) {
                         showDockingControl = true
@@ -122,6 +130,12 @@ public struct HomeView: View {
             .onChange(of: viewModel.scannedAssets) { _, newValue in
                 if canShowResults {
                     startStaggerReveal(for: sortedAssets.map(\.id))
+                }
+            }
+            .onChange(of: canShowResults) { _, newValue in
+                if !newValue {
+                    resultsTopBaseline = nil
+                    isNavBarCollapsed = false
                 }
             }
         }
@@ -159,27 +173,38 @@ public struct HomeView: View {
                 .padding(.top, 72)
                 Spacer()
             } else {
-                VStack(spacing: 12) {
-                    HStack {
-                        VStack(alignment: .leading, spacing: 4) {
-                            Text("\(viewModel.scannedAssets.count) large videos")
-                                .font(.headline)
-                            Text("Potential savings: \(viewModel.potentialSavings.formattedBytes)")
-                                .font(.subheadline)
-                                .foregroundColor(.green)
-                        }
-                        Spacer()
-                        Picker("Sort by", selection: $sortOption) {
-                            ForEach(SortOption.allCases, id: \.self) { option in
-                                Text(option.rawValue).tag(option)
-                            }
-                        }
-                        .pickerStyle(.menu)
-                    }
-                    .padding(.horizontal, 16)
+                if canShowResults {
+                    ScrollView {
+                        VStack(spacing: 12) {
+                            Color.clear
+                                .frame(height: 0)
+                                .background(
+                                    GeometryReader { proxy in
+                                        Color.clear.preference(
+                                            key: ScrollOffsetPreferenceKey.self,
+                                            value: proxy.frame(in: .named("resultsScroll")).minY
+                                        )
+                                    }
+                                )
 
-                    if canShowResults {
-                        ScrollView {
+                            HStack {
+                                VStack(alignment: .leading, spacing: 4) {
+                                    Text("\(viewModel.scannedAssets.count) large videos")
+                                        .font(.headline)
+                                    Text("Potential savings: \(viewModel.potentialSavings.formattedBytes)")
+                                        .font(.subheadline)
+                                        .foregroundColor(.green)
+                                }
+                                Spacer()
+                                Picker("Sort by", selection: $sortOption) {
+                                    ForEach(SortOption.allCases, id: \.self) { option in
+                                        Text(option.rawValue).tag(option)
+                                    }
+                                }
+                                .pickerStyle(.menu)
+                            }
+                            .padding(.top, 8)
+
                             LazyVStack(spacing: 12) {
                                 ForEach(sortedAssets.filter { visibleAssetIDs.contains($0.id) }) { asset in
                                     NavigationLink(destination: CompressionView(asset: asset)) {
@@ -190,20 +215,43 @@ public struct HomeView: View {
                                 }
                             }
                             .animation(.easeOut(duration: 0.28), value: visibleAssetIDs)
-                            .padding(.horizontal, 16)
-                            .padding(.bottom, 100)
                         }
-                        .frame(maxWidth: .infinity, maxHeight: .infinity)
-                        .ignoresSafeArea(.container, edges: .bottom)
-                    } else {
-                        VStack(spacing: 8) {
-                            ProgressView()
-                            Text("Finalizing scan...")
-                                .font(.caption)
-                                .foregroundColor(.secondary)
-                        }
-                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                        .padding(.horizontal, 16)
+                        .padding(.bottom, 100)
                     }
+                    .coordinateSpace(name: "resultsScroll")
+                    .onPreferenceChange(ScrollOffsetPreferenceKey.self) { currentOffset in
+                        if resultsTopBaseline == nil {
+                            resultsTopBaseline = currentOffset
+                            return
+                        }
+                        guard let baseline = resultsTopBaseline else { return }
+                        let delta = currentOffset - baseline
+                        // UIKit-like behavior: scrolling up (negative delta) hides nav bar.
+                        let shouldHide = delta < -8
+                        // Pulling down to top region shows nav bar again.
+                        let shouldShow = delta > -1
+
+                        if shouldHide, !isNavBarCollapsed {
+                            withAnimation(.easeInOut(duration: 0.2)) {
+                                isNavBarCollapsed = true
+                            }
+                        } else if shouldShow, isNavBarCollapsed {
+                            withAnimation(.easeInOut(duration: 0.2)) {
+                                isNavBarCollapsed = false
+                            }
+                        }
+                    }
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .ignoresSafeArea(.container, edges: [.bottom])
+                } else {
+                    VStack(spacing: 8) {
+                        ProgressView()
+                        Text("Finalizing scan...")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                    }
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
                 }
             }
         }
@@ -289,6 +337,8 @@ public struct HomeView: View {
         showToolbarRescanButton = false
         showDockingControl = true
         canShowResults = false
+        isNavBarCollapsed = false
+        resultsTopBaseline = nil
         pendingScanStart = true
         scanRippleAnimating = true
         showCompletionState = false
@@ -328,6 +378,8 @@ public struct HomeView: View {
             showCompletionState = false
             isDismissingScanControl = false
             canShowResults = true
+            isNavBarCollapsed = false
+            resultsTopBaseline = nil
             showToolbarRescanButton = true
             startStaggerReveal(for: sortedAssets.map(\.id))
         }
@@ -358,22 +410,27 @@ public struct HomeView: View {
         Button(action: action) {
             Image(systemName: symbol)
                 .font(.system(size: 15, weight: .semibold))
-                .foregroundStyle(Color.primary)
+                .foregroundStyle(Color.black.opacity(0.8))
                 .frame(width: 34, height: 34)
                 .background {
-                    ZStack {
-                        Circle().fill(.ultraThinMaterial)
-                        Circle().fill(Color.white.opacity(0.35))
-                    }
+                    Circle()
+                        .fill(Color.white.opacity(0.95))
                 }
                 .overlay(
                     Circle()
-                        .stroke(Color.white.opacity(0.45), lineWidth: 0.8)
+                        .stroke(Color.black.opacity(0.08), lineWidth: 0.9)
                 )
-                .shadow(color: Color.black.opacity(0.12), radius: 5, x: 0, y: 2)
+                .shadow(color: Color.black.opacity(0.12), radius: 8, x: 0, y: 3)
         }
         .buttonStyle(.plain)
         .accessibilityLabel(accessibilityLabel)
+    }
+}
+
+private struct ScrollOffsetPreferenceKey: PreferenceKey {
+    static var defaultValue: CGFloat = 0
+    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
+        value = nextValue()
     }
 }
 
