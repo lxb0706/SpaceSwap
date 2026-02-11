@@ -11,16 +11,31 @@ import UIKit
 struct PhotoAsset: Identifiable, Hashable {
     let id: String
     let phAsset: PHAsset
+    let filename: String
     let fileSize: Int64
     let duration: TimeInterval
     let isCloudAsset: Bool
+    let creationDate: Date?
+    let locationText: String?
     
     init(phAsset: PHAsset, fileSize: Int64) {
+        let primaryResource = PHAssetResource.assetResources(for: phAsset).first
         self.id = phAsset.localIdentifier
         self.phAsset = phAsset
+        self.filename = primaryResource?.originalFilename ?? "Unknown Video"
         self.fileSize = fileSize
         self.duration = phAsset.duration
         self.isCloudAsset = phAsset.sourceType == .typeCloudShared
+        self.creationDate = phAsset.creationDate
+        if let location = phAsset.location {
+            self.locationText = String(
+                format: "%.4f, %.4f",
+                location.coordinate.latitude,
+                location.coordinate.longitude
+            )
+        } else {
+            self.locationText = nil
+        }
     }
     
     func thumbnail(size: CGSize = CGSize(width: 100, height: 100)) async -> UIImage? {
