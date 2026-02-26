@@ -17,6 +17,7 @@ struct CompressionView: View {
     
     @State private var selectedQuality: CompressionQuality = .medium
     @State private var isFullscreenPlayerPresented = false
+    @Namespace private var playerTransitionNamespace
 
     init(asset: PhotoAsset) {
         self.asset = asset
@@ -25,147 +26,154 @@ struct CompressionView: View {
     }
     
     var body: some View {
-        VStack(spacing: 24) {
-            // Asset Preview
-            VStack(spacing: 16) {
-                previewPlayer
-                
-                VStack(spacing: 8) {
-                    Text("Video Details")
-                    .font(.headline)
-                    Text(asset.fileSize.formattedBytes)
-                        .font(.subheadline)
-                    Text("Duration: \(asset.duration.formattedDuration)")
-                        .font(.subheadline)
-                }
-            }
-            .padding(.horizontal)
-            
-            // Compression Settings
-            VStack(spacing: 16) {
-                Text("Compression Quality")
-                    .font(.headline)
-                
-                Picker("Quality", selection: $selectedQuality) {
-                    ForEach(CompressionQuality.allCases, id: \.self) { quality in
-                        Text(quality.rawValue).tag(quality)
-                    }
-                }
-                .pickerStyle(.segmented)
-                
-                VStack(alignment: .leading, spacing: 8) {
-                    Text("Estimated Results:")
-                        .font(.subheadline)
-                        .foregroundColor(.secondary)
-                    
-                    HStack {
-                        Text("Original: \(asset.fileSize.formattedBytes)")
-                        Spacer()
-                        Text("Estimated: ~\(estimatedCompressedSize(asset.fileSize, quality: selectedQuality).formattedBytes)")
-                    }
-                    .font(.caption)
-                }
-                .padding(.horizontal)
-            }
-            .padding(.horizontal)
-            
-            Spacer()
-            
-            // Compression Button
-            if !viewModel.isCompressing {
-                Button(action: {
-                    Task {
-                        await viewModel.startCompression(for: asset, quality: selectedQuality)
-                    }
-                }) {
-                    HStack {
-                        Image(systemName: "arrow.triangle.2.circlepath")
-                        Text("Start Compression")
-                    }
-                    .font(.headline)
-                    .foregroundColor(.white)
-                    .padding()
-                    .frame(maxWidth: .infinity)
-                    .background(Color.blue)
-                    .cornerRadius(12)
-                }
-                .padding(.horizontal)
-            } else {
-                // Progress View
+        ZStack {
+            VStack(spacing: 24) {
+                // Asset Preview
                 VStack(spacing: 16) {
-                    ProgressView("Compressing...", value: viewModel.compressionProgress)
-                        .progressViewStyle(.linear)
-                    
-                    Text("\(Int(viewModel.compressionProgress * 100))%")
+                    if !isFullscreenPlayerPresented {
+                        previewPlayer
+                    } else {
+                        Color.clear
+                            .frame(width: previewSize.width, height: previewSize.height)
+                    }
+
+                    VStack(spacing: 8) {
+                        Text("Video Details")
+                        .font(.headline)
+                        Text(asset.fileSize.formattedBytes)
+                            .font(.subheadline)
+                        Text("Duration: \(asset.duration.formattedDuration)")
+                            .font(.subheadline)
+                    }
+                }
+
+                .padding(.horizontal)
+
+                // Compression Settings
+                VStack(spacing: 16) {
+                    Text("Compression Quality")
+                        .font(.headline)
+
+                    Picker("Quality", selection: $selectedQuality) {
+                        ForEach(CompressionQuality.allCases, id: \.self) { quality in
+                            Text(quality.rawValue).tag(quality)
+                        }
+                    }
+                    .pickerStyle(.segmented)
+
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("Estimated Results:")
+                            .font(.subheadline)
+                            .foregroundColor(.secondary)
+
+                        HStack {
+                            Text("Original: \(asset.fileSize.formattedBytes)")
+                            Spacer()
+                            Text("Estimated: ~\(estimatedCompressedSize(asset.fileSize, quality: selectedQuality).formattedBytes)")
+                        }
                         .font(.caption)
-                        .foregroundColor(.secondary)
-                    
-                    if let currentAsset = viewModel.currentAsset {
-                        Text("Processing: \(currentAsset.id)")
+                    }
+                    .padding(.horizontal)
+                }
+                .padding(.horizontal)
+
+                Spacer()
+
+                // Compression Button
+                if !viewModel.isCompressing {
+                    Button(action: {
+                        Task {
+                            await viewModel.startCompression(for: asset, quality: selectedQuality)
+                        }
+                    }) {
+                        HStack {
+                            Image(systemName: "arrow.triangle.2.circlepath")
+                            Text("Start Compression")
+                        }
+                        .font(.headline)
+                        .foregroundColor(.white)
+                        .padding()
+                        .frame(maxWidth: .infinity)
+                        .background(Color.blue)
+                        .cornerRadius(12)
+                    }
+                    .padding(.horizontal)
+                } else {
+                    // Progress View
+                    VStack(spacing: 16) {
+                        ProgressView("Compressing...", value: viewModel.compressionProgress)
+                            .progressViewStyle(.linear)
+
+                        Text("\(Int(viewModel.compressionProgress * 100))%")
                             .font(.caption)
                             .foregroundColor(.secondary)
+
+                        if let currentAsset = viewModel.currentAsset {
+                            Text("Processing: \(currentAsset.id)")
+                                .font(.caption)
+                                .foregroundColor(.secondary)
+                        }
+
+                        Button("Cancel") {
+                            viewModel.cancelCompression()
+                        }
+                        .foregroundColor(.red)
                     }
-                    
-                    Button("Cancel") {
-                        viewModel.cancelCompression()
-                    }
-                    .foregroundColor(.red)
+                    .padding(.horizontal)
                 }
-                .padding(.horizontal)
-            }
-            
-            // Results
-            if let result = viewModel.compressionResult {
-                VStack(spacing: 12) {
-                    Image(systemName: "checkmark.circle.fill")
-                        .font(.system(size: 48))
-                        .foregroundColor(.green)
-                    
-                    Text("Compression Complete!")
+
+                // Results
+                if let result = viewModel.compressionResult {
+                    VStack(spacing: 12) {
+                        Image(systemName: "checkmark.circle.fill")
+                            .font(.system(size: 48))
+                            .foregroundColor(.green)
+
+                        Text("Compression Complete!")
+                            .font(.headline)
+
+                        VStack(spacing: 8) {
+                            HStack {
+                                Text("Original Size:")
+                                Spacer()
+                                Text(result.originalSize.formattedBytes)
+                            }
+                            HStack {
+                                Text("Compressed Size:")
+                                Spacer()
+                                Text(result.compressedSize.formattedBytes)
+                            }
+                            HStack {
+                                Text("Space Saved:")
+                                Spacer()
+                                Text((result.originalSize - result.compressedSize).formattedBytes)
+                                    .foregroundColor(.green)
+                            }
+                        }
+                        .font(.subheadline)
+
+                        Button("Done") {
+                            dismiss()
+                        }
                         .font(.headline)
-                    
-                    VStack(spacing: 8) {
-                        HStack {
-                            Text("Original Size:")
-                            Spacer()
-                            Text(result.originalSize.formattedBytes)
-                        }
-                        HStack {
-                            Text("Compressed Size:")
-                            Spacer()
-                            Text(result.compressedSize.formattedBytes)
-                        }
-                        HStack {
-                            Text("Space Saved:")
-                            Spacer()
-                            Text((result.originalSize - result.compressedSize).formattedBytes)
-                                .foregroundColor(.green)
-                        }
+                        .foregroundColor(.white)
+                        .padding()
+                        .frame(maxWidth: .infinity)
+                        .background(Color.green)
+                        .cornerRadius(12)
                     }
-                    .font(.subheadline)
-                    
-                    Button("Done") {
-                        dismiss()
-                    }
-                    .font(.headline)
-                    .foregroundColor(.white)
-                    .padding()
-                    .frame(maxWidth: .infinity)
-                    .background(Color.green)
-                    .cornerRadius(12)
+                    .padding(.horizontal)
                 }
-                .padding(.horizontal)
+            }
+            if isFullscreenPlayerPresented {
+                fullscreenPlayerOverlay
+                    .zIndex(10)
             }
         }
         .navigationTitle("Compress Video")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar(.hidden, for: .tabBar)
-        .fullScreenCover(isPresented: $isFullscreenPlayerPresented) {
-            FullscreenPlayerView(
-                playbackViewModel: playbackViewModel,
-                dismissFullscreen: { isFullscreenPlayerPresented = false }
-            )
-        }
+        .toolbar(isFullscreenPlayerPresented ? .hidden : .visible, for: .navigationBar)
         .alert("Compression Error", isPresented: .constant(viewModel.error != nil), actions: {
             Button("OK") {
                 viewModel.clearResults()
@@ -180,7 +188,33 @@ struct CompressionView: View {
     private var previewPlayer: some View {
         let size = previewSize
         return ZStack {
-            RoundedRectangle(cornerRadius: 16)
+            playerSurface(cornerRadius: 16)
+            fullscreenToggleButton(isFullscreen: false)
+        }
+        .frame(width: size.width, height: size.height)
+        .matchedGeometryEffect(id: "playerContainer", in: playerTransitionNamespace)
+    }
+
+    private var fullscreenPlayerOverlay: some View {
+        ZStack {
+            Color.black
+                .ignoresSafeArea()
+                .transition(.opacity)
+
+            ZStack {
+                playerSurface(cornerRadius: 0)
+                    .matchedGeometryEffect(id: "playerContainer", in: playerTransitionNamespace)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .ignoresSafeArea()
+                fullscreenToggleButton(isFullscreen: true)
+            }
+        }
+        .transition(.opacity)
+    }
+
+    private func playerSurface(cornerRadius: CGFloat) -> some View {
+        ZStack {
+            RoundedRectangle(cornerRadius: cornerRadius)
                 .fill(Color.black.opacity(0.92))
 
             if let message = playbackViewModel.loadErrorMessage {
@@ -191,29 +225,13 @@ struct CompressionView: View {
                     .padding()
             } else {
                 VideoPlayer(player: playbackViewModel.player)
-                    .onTapGesture {
-                        playbackViewModel.togglePlayback()
-                    }
-                    .overlay(alignment: .center) {
-                        if !playbackViewModel.isPlaying {
-                            Image(systemName: "play.circle.fill")
-                                .font(.system(size: 48))
-                                .foregroundStyle(.white.opacity(0.9))
-                        }
-                    }
-                    .overlay(alignment: .bottomTrailing) {
-                        Button {
-                            isFullscreenPlayerPresented = true
-                        } label: {
-                            Image(systemName: "arrow.up.left.and.arrow.down.right")
-                                .font(.system(size: 16, weight: .semibold))
-                                .foregroundColor(.white)
-                                .padding(10)
-                                .background(.ultraThinMaterial, in: Circle())
-                        }
-                        .padding(12)
-                    }
-                    .clipShape(RoundedRectangle(cornerRadius: 16))
+                    .clipShape(RoundedRectangle(cornerRadius: cornerRadius))
+
+                if !playbackViewModel.isPlaying {
+                    Image(systemName: "play.circle.fill")
+                        .font(.system(size: 48))
+                        .foregroundStyle(.white.opacity(0.9))
+                }
 
                 if !playbackViewModel.isReady {
                     ProgressView()
@@ -221,12 +239,36 @@ struct CompressionView: View {
                 }
             }
         }
-        .frame(width: size.width, height: size.height)
-        .overlay(alignment: .bottom) {
-            PlaybackControlsView(playbackViewModel: playbackViewModel, showsFullscreenButton: false, toggleFullscreen: {})
-                .padding(.horizontal, 10)
-                .padding(.bottom, 10)
+        .contentShape(Rectangle())
+        .onTapGesture {
+            guard playbackViewModel.loadErrorMessage == nil else { return }
+            playbackViewModel.togglePlayback()
         }
+    }
+
+    private func fullscreenToggleButton(isFullscreen: Bool) -> some View {
+        VStack {
+            HStack {
+                Spacer()
+                if playbackViewModel.loadErrorMessage == nil {
+                    Button {
+                        withAnimation(.snappy(duration: 0.42, extraBounce: 0.02)) {
+                            isFullscreenPlayerPresented = !isFullscreen
+                        }
+                    } label: {
+                        Image(systemName: isFullscreen ? "xmark.circle.fill" : "viewfinder.circle.fill")
+                            .font(.system(size: 28, weight: .semibold))
+                            .foregroundStyle(.white.opacity(0.95))
+                            .shadow(color: .black.opacity(0.25), radius: 4, x: 0, y: 2)
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+            .padding(.top, 12)
+            .padding(.horizontal, 12)
+            Spacer()
+        }
+        .zIndex(20)
     }
 
     private var previewSize: CGSize {
@@ -251,115 +293,5 @@ struct CompressionView: View {
         case .original: ratio = 1.0
         }
         return Int64(Double(originalSize) * ratio)
-    }
-}
-
-private struct PlaybackControlsView: View {
-    @ObservedObject var playbackViewModel: CompressionPlaybackViewModel
-    let showsFullscreenButton: Bool
-    let toggleFullscreen: () -> Void
-
-    var body: some View {
-        VStack(spacing: 8) {
-            HStack(spacing: 8) {
-                Text(playbackViewModel.formattedTime(playbackViewModel.currentTime))
-                    .font(.caption2.monospacedDigit())
-                    .foregroundColor(.white)
-
-                Slider(
-                    value: Binding(
-                        get: { playbackViewModel.currentTime },
-                        set: { playbackViewModel.updateScrubbingTime($0) }
-                    ),
-                    in: 0...max(playbackViewModel.duration, 0.1),
-                    onEditingChanged: { editing in
-                        if editing {
-                            playbackViewModel.beginScrubbing()
-                        } else {
-                            playbackViewModel.endScrubbing()
-                        }
-                    }
-                )
-                .tint(.white)
-                .disabled(!playbackViewModel.isReady)
-
-                Text(playbackViewModel.formattedTime(playbackViewModel.duration))
-                    .font(.caption2.monospacedDigit())
-                    .foregroundColor(.white)
-            }
-
-            HStack(spacing: 20) {
-                Button {
-                    playbackViewModel.togglePlayback()
-                } label: {
-                    Image(systemName: playbackViewModel.isPlaying ? "pause.fill" : "play.fill")
-                        .font(.system(size: 14, weight: .bold))
-                        .foregroundColor(.white)
-                        .frame(width: 34, height: 34)
-                        .background(.ultraThinMaterial, in: Circle())
-                }
-                .disabled(!playbackViewModel.isReady)
-
-                if showsFullscreenButton {
-                    Button {
-                        toggleFullscreen()
-                    } label: {
-                        Image(systemName: "arrow.down.right.and.arrow.up.left")
-                            .font(.system(size: 13, weight: .semibold))
-                            .foregroundColor(.white)
-                            .frame(width: 34, height: 34)
-                            .background(.ultraThinMaterial, in: Circle())
-                    }
-                }
-            }
-        }
-        .padding(10)
-        .background(Color.black.opacity(0.42), in: RoundedRectangle(cornerRadius: 12))
-    }
-}
-
-private struct FullscreenPlayerView: View {
-    @ObservedObject var playbackViewModel: CompressionPlaybackViewModel
-    let dismissFullscreen: () -> Void
-
-    var body: some View {
-        ZStack(alignment: .topLeading) {
-            Color.black.ignoresSafeArea()
-
-            VStack {
-                Spacer()
-                VideoPlayer(player: playbackViewModel.player)
-                    .aspectRatio(contentMode: .fit)
-                    .onTapGesture {
-                        playbackViewModel.togglePlayback()
-                    }
-                Spacer()
-            }
-            .ignoresSafeArea()
-
-            Button {
-                dismissFullscreen()
-            } label: {
-                Image(systemName: "arrow.down.right.and.arrow.up.left")
-                    .font(.system(size: 17, weight: .semibold))
-                    .foregroundColor(.white)
-                    .frame(width: 42, height: 42)
-                    .background(.ultraThinMaterial, in: Circle())
-            }
-            .padding(.top, 14)
-            .padding(.leading, 14)
-
-            VStack {
-                Spacer()
-                PlaybackControlsView(
-                    playbackViewModel: playbackViewModel,
-                    showsFullscreenButton: false,
-                    toggleFullscreen: {}
-                )
-                .padding(.horizontal, 14)
-                .padding(.bottom, 18)
-            }
-        }
-        .statusBar(hidden: true)
     }
 }
