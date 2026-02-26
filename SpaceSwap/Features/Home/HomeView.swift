@@ -13,6 +13,7 @@ import UIKit
 
 public struct HomeView: View {
     @StateObject private var viewModel = HomeViewModel()
+    @StateObject private var queueManager = CompressionQueueManager.shared
     @State private var sortOption: SortOption = .dateNewest
     @State private var pendingScanStart = false
     @State private var canShowResults = false
@@ -27,6 +28,8 @@ public struct HomeView: View {
     @State private var showStopScanAlert = false
     @State private var shouldSkipFinishTransition = false
     @State private var visibleAssetIDs: Set<String> = []
+    @State private var selectedAssetForCompression: PhotoAsset?
+    @State private var isQueueSheetPresented = false
     @State private var revealTask: Task<Void, Never>?
     @State private var transitionTask: Task<Void, Never>?
 
@@ -166,6 +169,14 @@ public struct HomeView: View {
                     }
                 }
             }
+            .navigationDestination(item: $selectedAssetForCompression) { asset in
+                CompressionView(asset: asset)
+            }
+            .sheet(isPresented: $isQueueSheetPresented) {
+                CompressionQueueSheetView(queueManager: queueManager)
+                    .presentationDetents([.medium, .large])
+                    .presentationDragIndicator(.visible)
+            }
             .alert("Stop scanning now?", isPresented: $showStopScanAlert) {
                 Button("Cancel", role: .cancel) {}
                 Button("Confirm Stop", role: .destructive) {
@@ -243,8 +254,10 @@ public struct HomeView: View {
 
                             LazyVStack(spacing: 12) {
                                 ForEach(sortedAssets.filter { visibleAssetIDs.contains($0.id) }) { asset in
-                                    NavigationLink(destination: CompressionView(asset: asset)) {
-                                        AssetRowView(asset: asset)
+                                    Button {
+                                        handleAssetTap(asset)
+                                    } label: {
+                                        AssetRowView(asset: asset, compressionEntry: queueManager.entry(for: asset.id))
                                     }
                                     .buttonStyle(.plain)
                                     .transition(.move(edge: .bottom).combined(with: .opacity))
@@ -480,6 +493,14 @@ public struct HomeView: View {
         .buttonStyle(.plain)
         .accessibilityLabel(accessibilityLabel)
     }
+
+    private func handleAssetTap(_ asset: PhotoAsset) {
+        if let entry = queueManager.entry(for: asset.id), entry.status == .queued || entry.status == .running {
+            isQueueSheetPresented = true
+        } else {
+            selectedAssetForCompression = asset
+        }
+    }
 }
 
 private struct ScrollOffsetPreferenceKey: PreferenceKey {
@@ -491,6 +512,7 @@ private struct ScrollOffsetPreferenceKey: PreferenceKey {
 
 private struct AssetRowView: View {
     let asset: PhotoAsset
+    let compressionEntry: CompressionQueueEntry?
     @State private var resolvedLocationName: String?
     @State private var didAnimateIn = false
 
@@ -528,6 +550,10 @@ private struct AssetRowView: View {
                         .font(.caption)
                         .foregroundColor(.secondary)
                         .lineLimit(1)
+                }
+
+                if let compressionEntry {
+                    compressionBadge(compressionEntry)
                 }
             }
 
@@ -585,6 +611,40 @@ private struct AssetRowView: View {
         await MainActor.run {
             resolvedLocationName = locationName
         }
+    }
+
+    private func compressionBadge(_ entry: CompressionQueueEntry) -> some View {
+        let text: String
+        let color: Color
+        switch entry.status {
+        case .queued:
+            text = "Queued"
+            color = .orange
+        case .running:
+            text = "Compressing"
+            color = .blue
+        case .success:
+            text = "Compressed"
+            color = .green
+        case .failed:
+            text = "Failed"
+            color = .red
+        case .cancelled:
+            text = "Cancelled"
+            color = .gray
+        }
+
+        return HStack(spacing: 6) {
+            Circle()
+                .fill(color)
+                .frame(width: 6, height: 6)
+            Text(text)
+                .font(.caption2.weight(.semibold))
+                .foregroundStyle(color)
+        }
+        .padding(.horizontal, 8)
+        .padding(.vertical, 4)
+        .background(color.opacity(0.12), in: Capsule())
     }
 }
 

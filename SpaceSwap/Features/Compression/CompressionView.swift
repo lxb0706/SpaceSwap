@@ -14,7 +14,7 @@ import Combine
 
 struct CompressionView: View {
     let asset: PhotoAsset
-    @StateObject private var viewModel: CompressionViewModel
+    @StateObject private var queueManager: CompressionQueueManager
     @StateObject private var playbackViewModel: CompressionPlaybackViewModel
     @StateObject private var locationViewModel: CompressionLocationViewModel
     @Environment(\.dismiss) private var dismiss
@@ -22,19 +22,21 @@ struct CompressionView: View {
     @State private var selectedQuality: CompressionQuality = .medium
     @State private var isFullscreenPlayerPresented = false
     @State private var isMetadataInfoPresented = false
+    @State private var isQueueSheetPresented = false
+    @State private var queueAlertMessage: String?
+    @State private var didLoadCompressedPreview = false
     @Namespace private var playerTransitionNamespace
 
     init(asset: PhotoAsset) {
         self.asset = asset
-        _viewModel = StateObject(wrappedValue: CompressionViewModel())
+        _queueManager = StateObject(wrappedValue: CompressionQueueManager.shared)
         _playbackViewModel = StateObject(wrappedValue: CompressionPlaybackViewModel(asset: asset.phAsset))
         _locationViewModel = StateObject(wrappedValue: CompressionLocationViewModel(location: asset.phAsset.location))
     }
     
     var body: some View {
         ZStack {
-            VStack(spacing: 24) {
-                // Asset Preview
+            ScrollView {
                 VStack(spacing: 16) {
                     if !isFullscreenPlayerPresented {
                         previewPlayer
@@ -43,150 +45,32 @@ struct CompressionView: View {
                             .frame(width: previewSize.width, height: previewSize.height)
                     }
 
-                    VStack(spacing: 8) {
-                        HStack(spacing: 6) {
-                            Text("Video Details")
-                                .font(.headline)
-                            Button {
-                                isMetadataInfoPresented = true
-                            } label: {
-                                Image(systemName: "info.circle")
-                                    .font(.subheadline)
-                                    .foregroundStyle(.secondary)
-                            }
-                            .buttonStyle(.plain)
-                        }
-
-                        VStack(spacing: 6) {
-                            detailRow(title: "Name", value: asset.filename)
-                            detailRow(title: "Original Size", value: asset.fileSize.formattedBytes)
-                            detailRow(title: "Duration", value: asset.duration.formattedDuration)
-                            detailRow(title: "Resolution", value: "\(asset.phAsset.pixelWidth) × \(asset.phAsset.pixelHeight)")
-                            detailRow(title: "Created", value: formattedDate(asset.creationDate) ?? "Unknown")
-                            detailRow(title: "Location", value: locationViewModel.primaryLocationText)
-                            detailRow(title: "Storage", value: asset.isCloudAsset ? "iCloud (download on demand)" : "On Device")
-                        }
-                    }
-                }
-
-                .padding(.horizontal)
-
-                // Compression Settings
-                VStack(spacing: 16) {
-                    Text("Compression Quality")
-                        .font(.headline)
-
-                    Picker("Quality", selection: $selectedQuality) {
-                        ForEach(CompressionQuality.allCases, id: \.self) { quality in
-                            Text(quality.rawValue).tag(quality)
-                        }
-                    }
-                    .pickerStyle(.segmented)
-
-                    VStack(alignment: .leading, spacing: 8) {
-                        Text("Estimated Results:")
-                            .font(.subheadline)
-                            .foregroundColor(.secondary)
-
-                        HStack {
-                            Text("Original: \(asset.fileSize.formattedBytes)")
-                            Spacer()
-                            Text("Estimated: ~\(estimatedCompressedSize(asset.fileSize, quality: selectedQuality).formattedBytes)")
-                        }
-                        .font(.caption)
-                    }
-                    .padding(.horizontal)
-                }
-                .padding(.horizontal)
-
-                Spacer()
-
-                // Compression Button
-                if !viewModel.isCompressing {
-                    Button(action: {
-                        Task {
-                            await viewModel.startCompression(for: asset, quality: selectedQuality)
-                        }
-                    }) {
-                        HStack {
-                            Image(systemName: "arrow.triangle.2.circlepath")
-                            Text("Start Compression")
-                        }
-                        .font(.headline)
-                        .foregroundColor(.white)
-                        .padding()
-                        .frame(maxWidth: .infinity)
-                        .background(Color.blue)
-                        .cornerRadius(12)
-                    }
-                    .padding(.horizontal)
-                } else {
-                    // Progress View
-                    VStack(spacing: 16) {
-                        ProgressView("Compressing...", value: viewModel.compressionProgress)
-                            .progressViewStyle(.linear)
-
-                        Text("\(Int(viewModel.compressionProgress * 100))%")
+                    HStack(spacing: 6) {
+                        Image(systemName: isCompressedPreview ? "checkmark.seal.fill" : "circle.fill")
                             .font(.caption)
-                            .foregroundColor(.secondary)
-
-                        if let currentAsset = viewModel.currentAsset {
-                            Text("Processing: \(currentAsset.id)")
-                                .font(.caption)
-                                .foregroundColor(.secondary)
-                        }
-
-                        Button("Cancel") {
-                            viewModel.cancelCompression()
-                        }
-                        .foregroundColor(.red)
+                        Text(isCompressedPreview ? "Showing Compressed Video" : "Showing Original Video")
+                            .font(.caption.weight(.semibold))
                     }
-                    .padding(.horizontal)
-                }
+                    .foregroundStyle(isCompressedPreview ? .green : .secondary)
 
-                // Results
-                if let result = viewModel.compressionResult {
-                    VStack(spacing: 12) {
-                        Image(systemName: "checkmark.circle.fill")
-                            .font(.system(size: 48))
-                            .foregroundColor(.green)
+                    videoDetailsCard
+                    compressionSettingsCard
 
-                        Text("Compression Complete!")
-                            .font(.headline)
-
-                        VStack(spacing: 8) {
-                            HStack {
-                                Text("Original Size:")
-                                Spacer()
-                                Text(result.originalSize.formattedBytes)
-                            }
-                            HStack {
-                                Text("Compressed Size:")
-                                Spacer()
-                                Text(result.compressedSize.formattedBytes)
-                            }
-                            HStack {
-                                Text("Space Saved:")
-                                Spacer()
-                                Text((result.originalSize - result.compressedSize).formattedBytes)
-                                    .foregroundColor(.green)
-                            }
-                        }
-                        .font(.subheadline)
-
-                        Button("Done") {
-                            dismiss()
-                        }
-                        .font(.headline)
-                        .foregroundColor(.white)
-                        .padding()
-                        .frame(maxWidth: .infinity)
-                        .background(Color.green)
-                        .cornerRadius(12)
+                    if let entry = currentQueueEntry {
+                        compressionStatusBanner(entry: entry)
                     }
-                    .padding(.horizontal)
+
+                    compressionActionSection
+
+                    if let result = currentQueueEntry?.record {
+                        compressionResultCard(result: result)
+                    }
                 }
+                .padding(.horizontal, 16)
+                .padding(.vertical, 12)
+                .padding(.bottom, 20)
             }
+            .scrollIndicators(.visible)
             if isFullscreenPlayerPresented {
                 fullscreenPlayerOverlay
                     .zIndex(10)
@@ -196,23 +80,322 @@ struct CompressionView: View {
         .navigationBarTitleDisplayMode(.inline)
         .toolbar(.hidden, for: .tabBar)
         .toolbar(isFullscreenPlayerPresented ? .hidden : .visible, for: .navigationBar)
-        .alert("Compression Error", isPresented: .constant(viewModel.error != nil), actions: {
-            Button("OK") {
-                viewModel.clearResults()
+        .toolbar {
+            ToolbarItem(placement: .topBarTrailing) {
+                if !isFullscreenPlayerPresented {
+                    Button {
+                        isQueueSheetPresented = true
+                    } label: {
+                        Image(systemName: "list.bullet.rectangle")
+                    }
+                }
             }
+        }
+        .alert("Queue Message", isPresented: Binding(
+            get: { queueAlertMessage != nil },
+            set: { newValue in
+                if !newValue { queueAlertMessage = nil }
+            }
+        ), actions: {
+            Button("OK", role: .cancel) { queueAlertMessage = nil }
         }, message: {
-            if let error = viewModel.error {
-                Text(error.localizedDescription)
-            }
+            Text(queueAlertMessage ?? "")
         })
         .sheet(isPresented: $isMetadataInfoPresented) {
             metadataInfoSheet
                 .presentationDetents([.medium, .large])
                 .presentationDragIndicator(.visible)
         }
+        .sheet(isPresented: $isQueueSheetPresented) {
+            CompressionQueueSheetView(queueManager: queueManager)
+                .presentationDetents([.medium, .large])
+                .presentationDragIndicator(.visible)
+        }
         .task {
             await locationViewModel.resolveIfNeeded()
+            await loadCompressedPreviewIfNeeded()
         }
+        .onChange(of: currentQueueEntry?.status) { _, _ in
+            Task {
+                await loadCompressedPreviewIfNeeded()
+            }
+        }
+    }
+
+    private var currentQueueEntry: CompressionQueueEntry? {
+        queueManager.entry(for: asset.id)
+    }
+
+    private var isCompressedPreview: Bool {
+        currentQueueEntry?.status == .success
+    }
+
+    private var videoDetailsCard: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(spacing: 6) {
+                Text("Video Details")
+                    .font(.headline)
+                Spacer()
+                Button {
+                    isMetadataInfoPresented = true
+                } label: {
+                    Label("More Details", systemImage: "info.circle")
+                        .font(.caption.weight(.semibold))
+                }
+                .buttonStyle(.plain)
+            }
+
+            detailRow(title: "Name", value: asset.filename)
+            detailRow(title: "Size", value: asset.fileSize.formattedBytes)
+            detailRow(title: "Duration", value: asset.duration.formattedDuration)
+            detailRow(title: "Resolution", value: "\(asset.phAsset.pixelWidth) × \(asset.phAsset.pixelHeight)")
+        }
+        .padding(12)
+        .background(Color(.secondarySystemBackground), in: RoundedRectangle(cornerRadius: 12))
+    }
+
+    private var compressionSettingsCard: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("Compression Quality")
+                .font(.headline)
+
+            Picker("Quality", selection: $selectedQuality) {
+                ForEach(CompressionQuality.allCases, id: \.self) { quality in
+                    Text(quality.rawValue).tag(quality)
+                }
+            }
+            .pickerStyle(.segmented)
+            .disabled(currentQueueEntry != nil)
+
+            VStack(alignment: .leading, spacing: 4) {
+                Text("Estimated Results")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                HStack {
+                    Text("Original: \(asset.fileSize.formattedBytes)")
+                    Spacer()
+                    Text("Estimated: ~\(estimatedCompressedSize(asset.fileSize, quality: selectedQuality).formattedBytes)")
+                }
+                .font(.caption)
+            }
+        }
+        .padding(12)
+        .background(Color(.secondarySystemBackground), in: RoundedRectangle(cornerRadius: 12))
+    }
+
+    private func compressionResultCard(result: CompressionRecord) -> some View {
+        VStack(spacing: 10) {
+            HStack {
+                Image(systemName: "checkmark.circle.fill")
+                    .foregroundStyle(.green)
+                Text("Compression Complete")
+                    .font(.headline)
+                Spacer()
+            }
+
+            detailRow(title: "Original", value: result.originalSize.formattedBytes)
+            detailRow(title: "Compressed", value: result.compressedSize.formattedBytes)
+            detailRow(
+                title: "Saved",
+                value: (result.originalSize - result.compressedSize).formattedBytes
+            )
+
+            Button("Done") {
+                dismiss()
+            }
+            .font(.headline)
+            .foregroundColor(.white)
+            .padding(.vertical, 10)
+            .frame(maxWidth: .infinity)
+            .background(Color.green)
+            .cornerRadius(10)
+        }
+        .padding(12)
+        .background(Color(.secondarySystemBackground), in: RoundedRectangle(cornerRadius: 12))
+    }
+
+    private var compressionActionSection: some View {
+        if let entry = currentQueueEntry, entry.status == .success {
+            return AnyView(EmptyView())
+        }
+
+        return AnyView(
+        VStack(spacing: 12) {
+            if let entry = currentQueueEntry, entry.status == .queued || entry.status == .running {
+                ProgressView(value: entry.progress)
+                    .progressViewStyle(.linear)
+                Text(entry.status == .queued ? "Waiting in queue..." : "Compressing...")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                if entry.status == .queued {
+                    Text("Queue: \(queueManager.waitingCount) waiting, \(queueManager.runningCount) running")
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                } else {
+                    Text("\(Int(entry.progress * 100))%")
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                }
+            }
+
+            Button(action: handleCompressionAction) {
+                HStack {
+                    Image(systemName: actionButtonIconName)
+                    Text(actionButtonTitle)
+                }
+                .font(.headline)
+                .foregroundColor(.white)
+                .padding()
+                .frame(maxWidth: .infinity)
+                .background(actionButtonColor)
+                .cornerRadius(12)
+            }
+            .disabled(actionButtonDisabled)
+        }
+        )
+    }
+
+    private var actionButtonTitle: String {
+        guard let entry = currentQueueEntry else { return "Start Compression" }
+        switch entry.status {
+        case .queued:
+            return "Cancel (Waiting)"
+        case .running:
+            return "Cancel (Compressing)"
+        case .success:
+            return "Already Compressed"
+        case .failed:
+            return "Compression Failed (Session Locked)"
+        case .cancelled:
+            return "Cancelled (Session Locked)"
+        }
+    }
+
+    private var actionButtonIconName: String {
+        guard let entry = currentQueueEntry else { return "arrow.triangle.2.circlepath" }
+        switch entry.status {
+        case .queued, .running:
+            return "xmark"
+        case .success:
+            return "checkmark.circle"
+        case .failed:
+            return "exclamationmark.triangle"
+        case .cancelled:
+            return "slash.circle"
+        }
+    }
+
+    private var actionButtonColor: Color {
+        guard let entry = currentQueueEntry else { return .blue }
+        switch entry.status {
+        case .queued:
+            return .orange
+        case .running:
+            return .red
+        case .success:
+            return .green
+        case .failed, .cancelled:
+            return .gray
+        }
+    }
+
+    private var actionButtonDisabled: Bool {
+        guard let entry = currentQueueEntry else { return false }
+        switch entry.status {
+        case .queued, .running:
+            return false
+        case .success, .failed, .cancelled:
+            return true
+        }
+    }
+
+    private func handleCompressionAction() {
+        if let entry = currentQueueEntry {
+            switch entry.status {
+            case .queued, .running:
+                queueManager.cancel(assetID: asset.id)
+            case .success, .failed, .cancelled:
+                queueAlertMessage = "This video has already been processed in this app session."
+            }
+            return
+        }
+
+        let accepted = queueManager.enqueue(asset: asset, quality: selectedQuality)
+        if !accepted {
+            queueAlertMessage = "This video is already in the queue for this app session."
+        }
+    }
+
+    private func compressionStatusBanner(entry: CompressionQueueEntry) -> some View {
+        HStack(spacing: 8) {
+            Image(systemName: statusBannerIcon(entry.status))
+            Text(statusBannerText(entry.status))
+                .font(.subheadline.weight(.semibold))
+            Spacer()
+        }
+        .padding(10)
+        .background(statusBannerColor(entry.status).opacity(0.14), in: RoundedRectangle(cornerRadius: 10))
+        .overlay(
+            RoundedRectangle(cornerRadius: 10)
+                .stroke(statusBannerColor(entry.status).opacity(0.25), lineWidth: 1)
+        )
+    }
+
+    private func statusBannerIcon(_ status: CompressionQueueStatus) -> String {
+        switch status {
+        case .queued:
+            return "clock.fill"
+        case .running:
+            return "arrow.triangle.2.circlepath.circle.fill"
+        case .success:
+            return "checkmark.seal.fill"
+        case .failed:
+            return "xmark.octagon.fill"
+        case .cancelled:
+            return "minus.circle.fill"
+        }
+    }
+
+    private func statusBannerText(_ status: CompressionQueueStatus) -> String {
+        switch status {
+        case .queued:
+            return "Queued for compression"
+        case .running:
+            return "Compressing now"
+        case .success:
+            return "Already compressed in this session"
+        case .failed:
+            return "Compression failed in this session"
+        case .cancelled:
+            return "Compression cancelled in this session"
+        }
+    }
+
+    private func statusBannerColor(_ status: CompressionQueueStatus) -> Color {
+        switch status {
+        case .queued:
+            return .orange
+        case .running:
+            return .blue
+        case .success:
+            return .green
+        case .failed:
+            return .red
+        case .cancelled:
+            return .gray
+        }
+    }
+
+    private func loadCompressedPreviewIfNeeded() async {
+        guard !didLoadCompressedPreview else { return }
+        guard let entry = currentQueueEntry, entry.status == .success else { return }
+        guard let compressedID = entry.record?.compressedAssetID else { return }
+
+        let result = PHAsset.fetchAssets(withLocalIdentifiers: [compressedID], options: nil)
+        guard let compressedAsset = result.firstObject else { return }
+
+        didLoadCompressedPreview = true
+        playbackViewModel.loadPlayerItem(for: compressedAsset)
     }
 
     private var previewPlayer: some View {

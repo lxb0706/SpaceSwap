@@ -21,16 +21,14 @@ final class CompressionPlaybackViewModel: ObservableObject {
 
     let player = AVPlayer()
 
-    private let phAsset: PHAsset
     private var requestID: PHImageRequestID?
     private var timeObserver: Any?
     private var endObserver: NSObjectProtocol?
     private var shouldResumeAfterSeek = false
 
     init(asset: PHAsset) {
-        self.phAsset = asset
         player.automaticallyWaitsToMinimizeStalling = true
-        loadPlayerItem()
+        loadPlayerItem(for: asset)
     }
 
     deinit {
@@ -81,13 +79,13 @@ final class CompressionPlaybackViewModel: ObservableObject {
         return String(format: "%02d:%02d", minutes, seconds)
     }
 
-    private func loadPlayerItem() {
+    func loadPlayerItem(for asset: PHAsset) {
         let options = PHVideoRequestOptions()
         options.isNetworkAccessAllowed = true
         options.deliveryMode = .automatic
         options.version = .current
 
-        requestID = PHImageManager.default().requestPlayerItem(forVideo: phAsset, options: options) { [weak self] item, info in
+        requestID = PHImageManager.default().requestPlayerItem(forVideo: asset, options: options) { [weak self] item, info in
             Task { @MainActor [weak self] in
                 guard let self else { return }
                 self.requestID = nil
