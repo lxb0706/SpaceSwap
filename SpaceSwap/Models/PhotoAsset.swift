@@ -22,12 +22,13 @@ struct PhotoAsset: Identifiable, Hashable {
     
     init(phAsset: PHAsset, fileSize: Int64) {
         let primaryResource = PHAssetResource.assetResources(for: phAsset).first
+        let locallyAvailable = primaryResource?.value(forKey: "locallyAvailable") as? Bool
         self.id = phAsset.localIdentifier
         self.phAsset = phAsset
         self.filename = primaryResource?.originalFilename ?? "Unknown Video"
         self.fileSize = fileSize
         self.duration = phAsset.duration
-        self.isCloudAsset = phAsset.sourceType == .typeCloudShared
+        self.isCloudAsset = (locallyAvailable == false)
         self.creationDate = phAsset.creationDate
         if let location = phAsset.location {
             self.latitude = location.coordinate.latitude

@@ -7,6 +7,13 @@
 
 import SwiftUI
 import SwiftData
+import AppIntents
+
+@available(iOS 17.0, *)
+struct SpaceSwapShortcutsProvider: AppShortcutsProvider {
+    @AppShortcutsBuilder
+    static var appShortcuts: [AppShortcut] { }
+}
 
 @main
 struct SpaceSwapApp: App {
@@ -14,6 +21,6 @@ struct SpaceSwapApp: App {
         WindowGroup {
             ContentView()
         }
-        .modelContainer(for: CompressionRecord.self)
+        .modelContainer(PersistenceService.sharedModelContainer)
     }
 }

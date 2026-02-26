@@ -7,6 +7,7 @@
 
 import Photos
 import Foundation
+@preconcurrency import AVFoundation
 
 enum CompressionQuality: String, CaseIterable {
     case low = "Low"
@@ -20,6 +21,32 @@ struct CompressionResult {
     let compressedSize: Int64
 }
 
+enum PhotoLibraryError: LocalizedError {
+    case accessDenied
+    case exportSessionCreationFailed
+    case assetLoadFailed
+    case needsICloudDownload
+    case unsupportedOutputType
+    case failedToResolveCreatedAssetID
+
+    var errorDescription: String? {
+        switch self {
+        case .accessDenied:
+            return "Photo library access denied"
+        case .exportSessionCreationFailed:
+            return "Failed to create export session"
+        case .assetLoadFailed:
+            return "Failed to load video asset"
+        case .needsICloudDownload:
+            return "Asset needs to be downloaded from iCloud"
+        case .unsupportedOutputType:
+            return "No supported output file type found for export"
+        case .failedToResolveCreatedAssetID:
+            return "Failed to resolve newly created asset identifier"
+        }
+    }
+}
+
 protocol PhotoLibraryServiceProtocol {
     func fetchLargeVideos(minSize: Int64) async throws -> [PhotoAsset]
     func deleteAsset(_ asset: PhotoAsset) async throws
@@ -28,11 +55,11 @@ protocol PhotoLibraryServiceProtocol {
 }
 
 final class PhotoLibraryService: PhotoLibraryServiceProtocol {
+    private var currentExportSession: AVAssetExportSession?
+    private var currentImageRequestID: PHImageRequestID?
+
     func fetchLargeVideos(minSize: Int64) async throws -> [PhotoAsset] {
-        let status = await PHPhotoLibrary.requestAuthorization(for: .readWrite)
-        guard status == .authorized || status == .limited else {
-            throw NSError(domain: "PhotoLibrary", code: 1, userInfo: [NSLocalizedDescriptionKey: "Photo library access denied"])
-        }
+        try await ensureAuthorization()
         
         return try await withCheckedThrowingContinuation { continuation in
             DispatchQueue.global(qos: .userInitiated).async {
@@ -73,12 +100,20 @@ final class PhotoLibraryService: PhotoLibraryServiceProtocol {
     }
     
     func saveVideo(from url: URL) async throws -> String {
-        try await withCheckedThrowingContinuation { continuation in
+        try await ensureAuthorization()
+
+        return try await withCheckedThrowingContinuation { continuation in
+            var createdAssetID: String?
             PHPhotoLibrary.shared().performChanges {
-                PHAssetChangeRequest.creationRequestForAssetFromVideo(atFileURL: url)
+                let request = PHAssetChangeRequest.creationRequestForAssetFromVideo(atFileURL: url)
+                createdAssetID = request?.placeholderForCreatedAsset?.localIdentifier
             } completionHandler: { success, error in
                 if success {
-                    continuation.resume(returning: "saved-video-id")
+                    if let createdAssetID {
+                        continuation.resume(returning: createdAssetID)
+                    } else {
+                        continuation.resume(throwing: PhotoLibraryError.failedToResolveCreatedAssetID)
+                    }
                 } else {
                     continuation.resume(throwing: error ?? NSError(domain: "Save", code: 1))
                 }
@@ -87,24 +122,221 @@ final class PhotoLibraryService: PhotoLibraryServiceProtocol {
     }
     
     func compressVideo(_ asset: PhotoAsset, quality: CompressionQuality, progressHandler: @escaping (Double) -> Void) async throws -> CompressionResult {
-        // Simulate compression process
-        for progress in stride(from: 0.0, through: 1.0, by: 0.1) {
-            try await Task.sleep(nanoseconds: 200_000_000) // 0.2 seconds
-            progressHandler(progress)
+        try await ensureAuthorization()
+        let outputURL = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString)
+            .appendingPathExtension("mp4")
+
+        return try await withTaskCancellationHandler(operation: {
+            defer {
+                try? FileManager.default.removeItem(at: outputURL)
+            }
+
+            try Task.checkCancellation()
+
+            let avAsset = try await requestAVAsset(for: asset.phAsset) { progress in
+                progressHandler(progress * 0.3)
+            }
+
+            try Task.checkCancellation()
+
+            let exportedURL = try await exportAsset(
+                avAsset,
+                quality: quality,
+                preferredOutputURL: outputURL
+            ) { progress in
+                progressHandler(0.3 + (Double(progress) * 0.7))
+            }
+
+            let compressedSize = try fileSize(at: exportedURL)
+            let compressedAssetId = try await saveVideo(from: exportedURL)
+
+            progressHandler(1.0)
+            return CompressionResult(compressedAssetId: compressedAssetId, compressedSize: compressedSize)
+        }, onCancel: {
+            if let currentImageRequestID {
+                PHImageManager.default().cancelImageRequest(currentImageRequestID)
+                self.currentImageRequestID = nil
+            }
+            currentExportSession?.cancelExport()
+            currentExportSession = nil
+        })
+    }
+
+    private func ensureAuthorization() async throws {
+        let status = await PHPhotoLibrary.requestAuthorization(for: .readWrite)
+        guard status == .authorized || status == .limited else {
+            throw PhotoLibraryError.accessDenied
         }
-        
-        // Calculate compressed size based on quality
-        let compressionRatio: Double
+    }
+
+    private func requestAVAsset(
+        for asset: PHAsset,
+        progressHandler: @escaping (Double) -> Void
+    ) async throws -> AVAsset {
+        do {
+            return try await requestAVAsset(for: asset, isNetworkAccessAllowed: false, progressHandler: nil)
+        } catch PhotoLibraryError.needsICloudDownload {
+            return try await requestAVAsset(for: asset, isNetworkAccessAllowed: true, progressHandler: progressHandler)
+        }
+    }
+
+    private func requestAVAsset(
+        for asset: PHAsset,
+        isNetworkAccessAllowed: Bool,
+        progressHandler: ((Double) -> Void)?
+    ) async throws -> AVAsset {
+        try await withCheckedThrowingContinuation { continuation in
+            let options = PHVideoRequestOptions()
+            options.isNetworkAccessAllowed = isNetworkAccessAllowed
+            options.deliveryMode = .highQualityFormat
+            options.version = .current
+            options.progressHandler = { progress, _, _, _ in
+                guard let progressHandler else { return }
+                DispatchQueue.main.async {
+                    progressHandler(progress)
+                }
+            }
+
+            let requestID = PHImageManager.default().requestAVAsset(forVideo: asset, options: options) { avAsset, _, info in
+                self.currentImageRequestID = nil
+
+                if let avAsset {
+                    continuation.resume(returning: avAsset)
+                    return
+                }
+
+                if (info?[PHImageCancelledKey] as? Bool) == true {
+                    continuation.resume(throwing: CancellationError())
+                    return
+                }
+
+                let isInCloud = (info?[PHImageResultIsInCloudKey] as? Bool) ?? false
+                if isInCloud && !isNetworkAccessAllowed {
+                    continuation.resume(throwing: PhotoLibraryError.needsICloudDownload)
+                    return
+                }
+
+                if let error = info?[PHImageErrorKey] as? Error {
+                    continuation.resume(throwing: error)
+                    return
+                }
+
+                continuation.resume(throwing: PhotoLibraryError.assetLoadFailed)
+            }
+
+            self.currentImageRequestID = requestID
+        }
+    }
+
+    private func exportAsset(
+        _ asset: AVAsset,
+        quality: CompressionQuality,
+        preferredOutputURL: URL,
+        progressHandler: @escaping (Float) -> Void
+    ) async throws -> URL {
+        let preset = await selectPreset(for: asset, quality: quality)
+        guard let exportSession = AVAssetExportSession(asset: asset, presetName: preset) else {
+            throw PhotoLibraryError.exportSessionCreationFailed
+        }
+
+        try? FileManager.default.removeItem(at: preferredOutputURL)
+        currentExportSession = exportSession
+
+        var outputURL = preferredOutputURL
+        let outputFileType: AVFileType
+        if exportSession.supportedFileTypes.contains(.mp4) {
+            outputFileType = .mp4
+        } else if exportSession.supportedFileTypes.contains(.mov) {
+            outputURL = preferredOutputURL.deletingPathExtension().appendingPathExtension("mov")
+            try? FileManager.default.removeItem(at: outputURL)
+            outputFileType = .mov
+        } else {
+            currentExportSession = nil
+            throw PhotoLibraryError.unsupportedOutputType
+        }
+
+        let progressTask = Task {
+            while !Task.isCancelled {
+                progressHandler(exportSession.progress)
+                try? await Task.sleep(nanoseconds: 100_000_000)
+            }
+        }
+
+        defer {
+            progressTask.cancel()
+            currentExportSession = nil
+        }
+
+        try await exportSession.export(to: outputURL, as: outputFileType)
+
+        progressHandler(1.0)
+        return outputURL
+    }
+
+    private func selectPreset(for asset: AVAsset, quality: CompressionQuality) async -> String {
+        let highPreferences = [
+            AVAssetExportPresetHEVC1920x1080,
+            AVAssetExportPresetHighestQuality,
+            AVAssetExportPreset1920x1080,
+            AVAssetExportPreset1280x720,
+            AVAssetExportPresetMediumQuality
+        ]
+
+        let mediumPreferences = [
+            AVAssetExportPresetHEVC1920x1080,
+            AVAssetExportPresetMediumQuality,
+            AVAssetExportPreset1280x720,
+            AVAssetExportPreset640x480,
+            AVAssetExportPresetLowQuality
+        ]
+
+        let lowPreferences = [
+            AVAssetExportPresetLowQuality,
+            AVAssetExportPreset640x480,
+            AVAssetExportPresetMediumQuality
+        ]
+
+        let originalPreferences = [
+            AVAssetExportPresetPassthrough,
+            AVAssetExportPresetHighestQuality
+        ]
+
+        let candidates: [String]
         switch quality {
-        case .low: compressionRatio = 0.3
-        case .medium: compressionRatio = 0.5
-        case .high: compressionRatio = 0.7
-        case .original: compressionRatio = 1.0
+        case .high:
+            candidates = highPreferences
+        case .medium:
+            candidates = mediumPreferences
+        case .low:
+            candidates = lowPreferences
+        case .original:
+            candidates = originalPreferences
         }
-        
-        let compressedSize = Int64(Double(asset.fileSize) * compressionRatio)
-        let compressedAssetId = "compressed-\(asset.id)"
-        
-        return CompressionResult(compressedAssetId: compressedAssetId, compressedSize: compressedSize)
+
+        for preset in candidates {
+            if await isPresetCompatible(preset, with: asset) {
+                return preset
+            }
+        }
+
+        return AVAssetExportPresetMediumQuality
+    }
+
+    private func isPresetCompatible(_ preset: String, with asset: AVAsset) async -> Bool {
+        await withCheckedContinuation { continuation in
+            AVAssetExportSession.determineCompatibility(
+                ofExportPreset: preset,
+                with: asset,
+                outputFileType: nil
+            ) { compatible in
+                continuation.resume(returning: compatible)
+            }
+        }
+    }
+
+    private func fileSize(at url: URL) throws -> Int64 {
+        let values = try url.resourceValues(forKeys: [.fileSizeKey])
+        return Int64(values.fileSize ?? 0)
     }
 }

@@ -28,7 +28,10 @@ struct SettingsView: View {
                 }
                 
                 Section(header: Text("Compression Settings")) {
-                    Picker("Default Preset", selection: $viewModel.defaultCompressionPreset) {
+                    Picker("Default Preset", selection: Binding(
+                        get: { viewModel.defaultCompressionPreset },
+                        set: { viewModel.updateDefaultCompressionPreset($0) }
+                    )) {
                         ForEach(compressionPresets, id: \.self) { preset in
                             Text(preset)
                         }
@@ -36,7 +39,10 @@ struct SettingsView: View {
                 }
                 
                 Section(header: Text("Behavior")) {
-                    Toggle("Auto-prompt to delete originals", isOn: $viewModel.autoPromptDelete)
+                    Toggle("Auto-prompt to delete originals", isOn: Binding(
+                        get: { viewModel.autoPromptDelete },
+                        set: { viewModel.updateAutoPromptDelete($0) }
+                    ))
                     Text("When enabled, the app will prompt to delete original files after successful compression.")
                         .font(.caption)
                         .foregroundColor(.secondary)

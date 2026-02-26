@@ -17,6 +17,12 @@ protocol PersistenceServiceProtocol {
 }
 
 final class PersistenceService: PersistenceServiceProtocol {
+    static let sharedModelContainer: ModelContainer = {
+        let schema = Schema([CompressionRecord.self])
+        let modelConfiguration = ModelConfiguration(schema: schema, isStoredInMemoryOnly: false)
+        return try! ModelContainer(for: schema, configurations: [modelConfiguration])
+    }()
+
     private let modelContext: ModelContext
     
     init(modelContext: ModelContext) {
@@ -24,10 +30,7 @@ final class PersistenceService: PersistenceServiceProtocol {
     }
     
     convenience init() {
-        let schema = Schema([CompressionRecord.self])
-        let modelConfiguration = ModelConfiguration(schema: schema, isStoredInMemoryOnly: false)
-        let modelContainer = try! ModelContainer(for: schema, configurations: [modelConfiguration])
-        let modelContext = ModelContext(modelContainer)
+        let modelContext = ModelContext(Self.sharedModelContainer)
         self.init(modelContext: modelContext)
     }
     

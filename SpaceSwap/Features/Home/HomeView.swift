@@ -8,6 +8,7 @@
 import SwiftUI
 import Photos
 import CoreLocation
+import MapKit
 import UIKit
 
 public struct HomeView: View {
@@ -456,7 +457,7 @@ public struct HomeView: View {
         revealTask = Task { @MainActor in
             for id in ids {
                 if Task.isCancelled { return }
-                withAnimation(.spring(response: 0.3, dampingFraction: 0.85)) {
+                _ = withAnimation(.spring(response: 0.3, dampingFraction: 0.85)) {
                     visibleAssetIDs.insert(id)
                 }
                 try? await Task.sleep(nanoseconds: 35_000_000)
@@ -641,27 +642,38 @@ private actor LocationNameCache {
         }
 
         let task = Task<String?, Never> {
-            let geocoder = CLGeocoder()
             let location = CLLocation(latitude: latitude, longitude: longitude)
 
             do {
-                let placemarks = try await geocoder.reverseGeocodeLocation(location)
-                guard let placemark = placemarks.first else {
-                    return nil
+                if #available(iOS 26.0, *) {
+                    guard let request = MKReverseGeocodingRequest(location: location) else {
+                        return nil
+                    }
+                    let mapItems = try await request.mapItems
+                    guard let address = mapItems.first?.address else {
+                        return nil
+                    }
+                    return address.shortAddress ?? address.fullAddress
+                } else {
+                    let geocoder = CLGeocoder()
+                    let placemarks = try await geocoder.reverseGeocodeLocation(location)
+                    guard let placemark = placemarks.first else {
+                        return nil
+                    }
+
+                    let parts = [
+                        placemark.subLocality,
+                        placemark.locality,
+                        placemark.administrativeArea,
+                        placemark.country
+                    ].compactMap { $0 }.filter { !$0.isEmpty }
+
+                    guard !parts.isEmpty else {
+                        return nil
+                    }
+
+                    return parts.joined(separator: ", ")
                 }
-
-                let parts = [
-                    placemark.subLocality,
-                    placemark.locality,
-                    placemark.administrativeArea,
-                    placemark.country
-                ].compactMap { $0 }.filter { !$0.isEmpty }
-
-                guard !parts.isEmpty else {
-                    return nil
-                }
-
-                return parts.joined(separator: ", ")
             } catch {
                 return nil
             }
