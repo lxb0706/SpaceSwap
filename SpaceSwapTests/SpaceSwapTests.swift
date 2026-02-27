@@ -108,6 +108,16 @@ final class SpaceSwapTests: XCTestCase {
         )
     }
 
+    func testScanDecorationFiltersOriginalsAndMarksCompressedCopies() throws {
+        let output = ScanDecorationHelper.decorate(
+            scannedIDs: ["a", "b", "c"],
+            originalIDs: ["b"],
+            compressedIDs: ["c", "z"]
+        )
+        XCTAssertEqual(output.filteredIDs, ["a", "c"])
+        XCTAssertEqual(output.compressedCopyIDs, ["c"])
+    }
+
     func testHistoryDeleteOriginalUpdatesPersistenceAndReloads() async throws {
         final class PhotoLibraryServiceMock: PhotoLibraryServiceProtocol {
             var deletedIdentifiers: [String] = []

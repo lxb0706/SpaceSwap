@@ -257,7 +257,22 @@ public struct HomeView: View {
                                     Button {
                                         handleAssetTap(asset)
                                     } label: {
-                                        AssetRowView(asset: asset, compressionEntry: queueManager.entry(for: asset.id))
+                                        let compressedCopyRecord = viewModel.compressedCopyRecordsByAssetID[asset.id]
+                                        let displayName: String = {
+                                            guard let compressedCopyRecord else { return asset.filename }
+                                            guard !compressedCopyRecord.originalFilename.isEmpty else { return asset.filename }
+                                            return String.spaceswapCompressedCopyDisplayName(
+                                                originalFilename: compressedCopyRecord.originalFilename,
+                                                sequence: 1
+                                            )
+                                        }()
+
+                                        AssetRowView(
+                                            asset: asset,
+                                            displayName: displayName,
+                                            isCompressedCopy: compressedCopyRecord != nil,
+                                            compressionEntry: queueManager.entry(for: asset.id)
+                                        )
                                     }
                                     .buttonStyle(.plain)
                                     .transition(.move(edge: .bottom).combined(with: .opacity))
@@ -512,6 +527,8 @@ private struct ScrollOffsetPreferenceKey: PreferenceKey {
 
 private struct AssetRowView: View {
     let asset: PhotoAsset
+    let displayName: String
+    let isCompressedCopy: Bool
     let compressionEntry: CompressionQueueEntry?
     @State private var resolvedLocationName: String?
     @State private var didAnimateIn = false
@@ -521,9 +538,21 @@ private struct AssetRowView: View {
             AssetThumbnailView(asset: asset)
 
             VStack(alignment: .leading, spacing: 6) {
-                Text(asset.filename)
-                    .font(.headline)
-                    .lineLimit(1)
+                HStack(alignment: .firstTextBaseline, spacing: 8) {
+                    Text(displayName)
+                        .font(.headline)
+                        .lineLimit(1)
+
+                    if isCompressedCopy {
+                        Text("Compressed Copy")
+                            .font(.caption2)
+                            .fontWeight(.semibold)
+                            .padding(.horizontal, 8)
+                            .padding(.vertical, 4)
+                            .background(Color.green.opacity(0.18), in: Capsule())
+                            .foregroundColor(.green)
+                    }
+                }
 
                 HStack(spacing: 12) {
                     Label {
