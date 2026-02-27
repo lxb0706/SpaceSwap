@@ -34,6 +34,20 @@
                ReferencedContainer = "container:SpaceSwap.xcodeproj">
             </BuildableReference>
          </BuildActionEntry>
+         <BuildActionEntry
+            buildForTesting = "YES"
+            buildForRunning = "NO"
+            buildForProfiling = "NO"
+            buildForArchiving = "NO"
+            buildForAnalyzing = "YES">
+            <BuildableReference
+               BuildableIdentifier = "primary"
+               BlueprintIdentifier = "ED18BC4E2F39CE490026B0A8"
+               BuildableName = "SpaceSwapUITests.xctest"
+               BlueprintName = "SpaceSwapUITests"
+               ReferencedContainer = "container:SpaceSwap.xcodeproj">
+            </BuildableReference>
+         </BuildActionEntry>
       </BuildActionEntries>
    </BuildAction>
    <TestAction
@@ -49,6 +63,16 @@
                BlueprintIdentifier = "ED18BC442F39CE490026B0A8"
                BuildableName = "SpaceSwapTests.xctest"
                BlueprintName = "SpaceSwapTests"
+               ReferencedContainer = "container:SpaceSwap.xcodeproj">
+            </BuildableReference>
+         </TestableReference>
+         <TestableReference
+            skipped = "NO">
+            <BuildableReference
+               BuildableIdentifier = "primary"
+               BlueprintIdentifier = "ED18BC4E2F39CE490026B0A8"
+               BuildableName = "SpaceSwapUITests.xctest"
+               BlueprintName = "SpaceSwapUITests"
                ReferencedContainer = "container:SpaceSwap.xcodeproj">
             </BuildableReference>
          </TestableReference>
