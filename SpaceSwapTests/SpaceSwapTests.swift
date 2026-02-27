@@ -94,4 +94,17 @@ final class SpaceSwapTests: XCTestCase {
         XCTAssertEqual(records.count, 1)
         XCTAssertEqual(records.first?.isAssetDeleted, true)
     }
+
+    func testBaseNameStripsExtension() throws {
+        XCTAssertEqual("IMG_0001.MOV".spaceswapBaseName, "IMG_0001")
+        XCTAssertEqual("noext".spaceswapBaseName, "noext")
+        XCTAssertEqual("a.b.c.mov".spaceswapBaseName, "a.b.c")
+    }
+
+    func testCompressedCopyDisplayNameUsesSSSuffix() throws {
+        XCTAssertEqual(
+            "IMG_0001_SS_1",
+            String.spaceswapCompressedCopyDisplayName(originalFilename: "IMG_0001.MOV", sequence: 1)
+        )
+    }
 }
