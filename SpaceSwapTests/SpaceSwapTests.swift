@@ -49,4 +49,20 @@ final class SpaceSwapTests: XCTestCase {
         XCTAssertEqual(record.originalFilename, "IMG_0001.MOV")
     }
 
+    func testCompressionRecordFactoryThreadsOriginalFilename() throws {
+        let record = CompressionRecordFactory.make(
+            originalAssetID: "orig",
+            compressedAssetID: "comp",
+            originalFilename: "IMG_0001.MOV",
+            date: Date(timeIntervalSince1970: 0),
+            originalSize: 100,
+            compressedSize: 50,
+            quality: "Medium",
+            status: 1,
+            isAssetDeleted: false
+        )
+        XCTAssertEqual(record.originalFilename, "IMG_0001.MOV")
+        XCTAssertEqual(record.compressionRatio, 0.5, accuracy: 0.000_001)
+    }
+
 }

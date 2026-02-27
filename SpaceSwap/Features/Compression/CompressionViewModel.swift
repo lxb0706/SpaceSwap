@@ -46,13 +46,13 @@ final class CompressionViewModel: ObservableObject {
                     }
                 }
                 
-                let record = CompressionRecord(
+                let record = CompressionRecordFactory.make(
                     originalAssetID: asset.id,
                     compressedAssetID: result.compressedAssetId,
+                    originalFilename: asset.filename,
                     date: Date(),
                     originalSize: asset.fileSize,
                     compressedSize: result.compressedSize,
-                    compressionRatio: Double(result.compressedSize) / Double(asset.fileSize),
                     quality: quality.rawValue,
                     status: 1, // Success
                     isAssetDeleted: false

@@ -168,13 +168,13 @@ final class CompressionQueueManager: ObservableObject {
                 }
             }
 
-            let record = CompressionRecord(
+            let record = CompressionRecordFactory.make(
                 originalAssetID: entry.asset.id,
                 compressedAssetID: result.compressedAssetId,
+                originalFilename: entry.asset.filename,
                 date: Date(),
                 originalSize: entry.asset.fileSize,
                 compressedSize: result.compressedSize,
-                compressionRatio: Double(result.compressedSize) / Double(entry.asset.fileSize),
                 quality: entry.quality.rawValue,
                 status: 1,
                 isAssetDeleted: false
