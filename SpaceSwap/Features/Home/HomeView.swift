@@ -9,11 +9,13 @@ import SwiftUI
 import Photos
 import CoreLocation
 import MapKit
+import SwiftData
 import UIKit
 
 public struct HomeView: View {
     @StateObject private var viewModel = HomeViewModel()
     @StateObject private var queueManager = CompressionQueueManager.shared
+    @Query(sort: \CompressionRecord.date, order: .reverse) private var compressionRecords: [CompressionRecord]
     @State private var sortOption: SortOption = .dateNewest
     @State private var pendingScanStart = false
     @State private var canShowResults = false
@@ -38,6 +40,12 @@ public struct HomeView: View {
         case sizeAscending = "Size (Small First)"
         case dateNewest = "Date (Newest)"
         case dateOldest = "Date (Oldest)"
+    }
+
+    private var totalSavedSpaceFromHistory: Int64 {
+        compressionRecords
+            .filter { $0.status == 1 }
+            .reduce(0) { $0 + ($1.originalSize - $1.compressedSize) }
     }
 
     private var sortedAssets: [PhotoAsset] {
@@ -238,7 +246,7 @@ public struct HomeView: View {
                                 VStack(alignment: .leading, spacing: 4) {
                                     Text("\(viewModel.scannedAssets.count) large videos")
                                         .font(.headline)
-                                    Text("Potential savings: \(viewModel.potentialSavings.formattedBytes)")
+                                    Text("Saved so far: \(totalSavedSpaceFromHistory.formattedBytes)")
                                         .font(.subheadline)
                                         .foregroundColor(.green)
                                 }
