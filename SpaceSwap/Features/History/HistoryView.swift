@@ -9,6 +9,7 @@ import SwiftUI
 
 struct HistoryView: View {
     @StateObject private var viewModel = HistoryViewModel()
+    @State private var recordPendingDeleteOriginal: CompressionRecord?
     
     var body: some View {
         NavigationView {
@@ -83,6 +84,14 @@ struct HistoryView: View {
                                     Spacer()
                                     
                                     Menu {
+                                        if record.status == 1 && !record.isAssetDeleted {
+                                            Button(role: .destructive) {
+                                                recordPendingDeleteOriginal = record
+                                            } label: {
+                                                Label("Delete Original", systemImage: "trash")
+                                            }
+                                        }
+
                                         Button(role: .destructive) {
                                             viewModel.deleteRecord(record)
                                         } label: {
@@ -125,6 +134,19 @@ struct HistoryView: View {
                                 Text("Quality: \(record.quality)")
                                     .font(.caption)
                                     .foregroundColor(.secondary)
+
+                                if record.isAssetDeleted {
+                                    Text("Original Deleted")
+                                        .font(.caption)
+                                        .foregroundColor(.secondary)
+                                } else if record.status == 1 {
+                                    Button(role: .destructive) {
+                                        recordPendingDeleteOriginal = record
+                                    } label: {
+                                        Text("Delete Original")
+                                            .font(.caption)
+                                    }
+                                }
                             }
                             .padding(.vertical, 8)
                         }
@@ -167,5 +189,29 @@ struct HistoryView: View {
                 viewModel.loadHistory()
             }
         }
+        .alert(
+            "Delete Original?",
+            isPresented: Binding(
+                get: { recordPendingDeleteOriginal != nil },
+                set: { isPresented in
+                    if !isPresented {
+                        recordPendingDeleteOriginal = nil
+                    }
+                }
+            ),
+            actions: {
+                Button("Cancel", role: .cancel) {
+                    recordPendingDeleteOriginal = nil
+                }
+                Button("Delete", role: .destructive) {
+                    guard let recordPendingDeleteOriginal else { return }
+                    viewModel.deleteOriginal(for: recordPendingDeleteOriginal)
+                    self.recordPendingDeleteOriginal = nil
+                }
+            },
+            message: {
+                Text("This will move the original video to Recently Deleted.")
+            }
+        )
     }
 }

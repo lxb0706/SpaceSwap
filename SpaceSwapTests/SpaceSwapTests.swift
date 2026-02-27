@@ -107,4 +107,105 @@ final class SpaceSwapTests: XCTestCase {
             String.spaceswapCompressedCopyDisplayName(originalFilename: "IMG_0001.MOV", sequence: 1)
         )
     }
+
+    func testHistoryDeleteOriginalUpdatesPersistenceAndReloads() async throws {
+        final class PhotoLibraryServiceMock: PhotoLibraryServiceProtocol {
+            var deletedIdentifiers: [String] = []
+            var onDelete: (() -> Void)?
+
+            func fetchLargeVideos(minSize: Int64) async throws -> [PhotoAsset] {
+                []
+            }
+
+            func deleteAsset(_ asset: PhotoAsset) async throws {
+            }
+
+            func deleteAsset(localIdentifier: String) async throws {
+                deletedIdentifiers.append(localIdentifier)
+                onDelete?()
+            }
+
+            func saveVideo(from url: URL) async throws -> String {
+                ""
+            }
+
+            func compressVideo(
+                _ asset: PhotoAsset,
+                quality: CompressionQuality,
+                progressHandler: @escaping (Double) -> Void
+            ) async throws -> CompressionResult {
+                CompressionResult(compressedAssetId: "", compressedSize: 0)
+            }
+        }
+
+        final class PersistenceServiceMock: PersistenceServiceProtocol {
+            var records: [CompressionRecord] = []
+            var updateCallCount = 0
+            var onUpdate: (() -> Void)?
+            var onFetchAll: (() -> Void)?
+
+            func save(record: CompressionRecord) async throws {
+            }
+
+            func fetchAll() async throws -> [CompressionRecord] {
+                onFetchAll?()
+                return records
+            }
+
+            func delete(record: CompressionRecord) async throws {
+            }
+
+            func update(record: CompressionRecord) async throws {
+                updateCallCount += 1
+                onUpdate?()
+            }
+
+            var totalSavedSpace: Int64 {
+                get async throws { 0 }
+            }
+        }
+
+        let record = CompressionRecordFactory.make(
+            originalAssetID: "orig",
+            compressedAssetID: "comp",
+            originalFilename: "IMG_0001.MOV",
+            date: Date(timeIntervalSince1970: 0),
+            originalSize: 100,
+            compressedSize: 50,
+            quality: "Medium",
+            status: 1,
+            isAssetDeleted: false
+        )
+
+        let deleteCalled = expectation(description: "Photo library delete called")
+        let updateCalled = expectation(description: "Persistence update called")
+        let fetchAllCalled = expectation(description: "History reloaded")
+        fetchAllCalled.expectedFulfillmentCount = 2
+
+        let photoLibraryService = PhotoLibraryServiceMock()
+        photoLibraryService.onDelete = { deleteCalled.fulfill() }
+
+        let persistenceService = PersistenceServiceMock()
+        persistenceService.records = [record]
+        persistenceService.onUpdate = { updateCalled.fulfill() }
+        persistenceService.onFetchAll = { fetchAllCalled.fulfill() }
+
+        let viewModel = await MainActor.run {
+            HistoryViewModel(
+                persistenceService: persistenceService,
+                photoLibraryService: photoLibraryService,
+                shouldLoadHistory: true
+            )
+        }
+
+        await MainActor.run {
+            viewModel.deleteOriginal(for: record)
+        }
+
+        await fulfillment(of: [deleteCalled, updateCalled, fetchAllCalled], timeout: 3.0)
+
+        XCTAssertEqual(photoLibraryService.deletedIdentifiers, ["orig"])
+        XCTAssertEqual(persistenceService.updateCallCount, 1)
+        XCTAssertTrue(record.isAssetDeleted)
+    }
 }

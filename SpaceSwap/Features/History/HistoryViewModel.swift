@@ -15,10 +15,18 @@ final class HistoryViewModel: ObservableObject {
     @Published var error: Error?
     
     private let persistenceService: PersistenceServiceProtocol
+    private let photoLibraryService: PhotoLibraryServiceProtocol
     
-    init(persistenceService: PersistenceServiceProtocol = PersistenceService()) {
+    init(
+        persistenceService: PersistenceServiceProtocol = PersistenceService(),
+        photoLibraryService: PhotoLibraryServiceProtocol = PhotoLibraryService(),
+        shouldLoadHistory: Bool = true
+    ) {
         self.persistenceService = persistenceService
-        loadHistory()
+        self.photoLibraryService = photoLibraryService
+        if shouldLoadHistory {
+            loadHistory()
+        }
     }
     
     func loadHistory() {
@@ -41,6 +49,19 @@ final class HistoryViewModel: ObservableObject {
             do {
                 try await persistenceService.delete(record: record)
                 loadHistory() // Reload after deletion
+            } catch {
+                self.error = error
+            }
+        }
+    }
+
+    func deleteOriginal(for record: CompressionRecord) {
+        Task {
+            do {
+                try await photoLibraryService.deleteAsset(localIdentifier: record.originalAssetID)
+                record.isAssetDeleted = true
+                try await persistenceService.update(record: record)
+                loadHistory()
             } catch {
                 self.error = error
             }
