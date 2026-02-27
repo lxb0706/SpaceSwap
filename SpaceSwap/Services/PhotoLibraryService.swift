@@ -25,6 +25,7 @@ enum PhotoLibraryError: LocalizedError {
     case accessDenied
     case exportSessionCreationFailed
     case assetLoadFailed
+    case assetNotFound
     case needsICloudDownload
     case unsupportedOutputType
     case failedToResolveCreatedAssetID
@@ -37,6 +38,8 @@ enum PhotoLibraryError: LocalizedError {
             return "Failed to create export session"
         case .assetLoadFailed:
             return "Failed to load video asset"
+        case .assetNotFound:
+            return "Asset not found"
         case .needsICloudDownload:
             return "Asset needs to be downloaded from iCloud"
         case .unsupportedOutputType:
@@ -50,6 +53,7 @@ enum PhotoLibraryError: LocalizedError {
 protocol PhotoLibraryServiceProtocol {
     func fetchLargeVideos(minSize: Int64) async throws -> [PhotoAsset]
     func deleteAsset(_ asset: PhotoAsset) async throws
+    func deleteAsset(localIdentifier: String) async throws
     func saveVideo(from url: URL) async throws -> String
     func compressVideo(_ asset: PhotoAsset, quality: CompressionQuality, progressHandler: @escaping (Double) -> Void) async throws -> CompressionResult
 }
@@ -86,9 +90,32 @@ final class PhotoLibraryService: PhotoLibraryServiceProtocol {
     }
     
     func deleteAsset(_ asset: PhotoAsset) async throws {
+        try await ensureAuthorization()
+
         try await withCheckedThrowingContinuation { continuation in
             PHPhotoLibrary.shared().performChanges {
                 PHAssetChangeRequest.deleteAssets([asset.phAsset] as NSArray)
+            } completionHandler: { success, error in
+                if success {
+                    continuation.resume()
+                } else {
+                    continuation.resume(throwing: error ?? NSError(domain: "Delete", code: 1))
+                }
+            }
+        }
+    }
+
+    func deleteAsset(localIdentifier: String) async throws {
+        try await ensureAuthorization()
+
+        let result = PHAsset.fetchAssets(withLocalIdentifiers: [localIdentifier], options: nil)
+        guard let asset = result.firstObject else {
+            throw PhotoLibraryError.assetNotFound
+        }
+
+        try await withCheckedThrowingContinuation { continuation in
+            PHPhotoLibrary.shared().performChanges {
+                PHAssetChangeRequest.deleteAssets([asset] as NSArray)
             } completionHandler: { success, error in
                 if success {
                     continuation.resume()
