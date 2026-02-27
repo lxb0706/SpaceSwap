@@ -32,6 +32,9 @@
 /* Begin PBXFileSystemSynchronizedRootGroup section */
 		ED18BC3A2F39CE480026B0A8 /* SpaceSwap */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
+			excludes = (
+				Info.plist,
+			);
 			path = SpaceSwap;
 			sourceTree = "<group>";
 		};
@@ -400,18 +403,21 @@
 				DEVELOPMENT_TEAM = 3C6LFRBP5L;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
-				INFOPLIST_KEY_NSPhotoLibraryAddUsageDescription = "We need to save compressed videos back to your library";
-				INFOPLIST_KEY_NSPhotoLibraryUsageDescription = "We need access to compress your large videos and save space";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
-				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.lxb.SpaceSwap;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				INFOPLIST_FILE = SpaceSwap/Info.plist;
+				GENERATE_INFOPLIST_FILE = NO;
+				IPHONEOS_DEPLOYMENT_TARGET = 26.2;
 				MARKETING_VERSION = 1.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.lxb.SpaceSwapTests;
 				PRODUCT_NAME = "$(TARGET_NAME)";
@@ -424,34 +430,6 @@
 				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/SpaceSwap.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/SpaceSwap";
 			};
 			name = Debug;
-		};
-		ED18BC5B2F39CE490026B0A8 /* Release */ = {
-			isa = XCBuildConfiguration;
-			buildSettings = {
-				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
-				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
-				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 1;
-				DEVELOPMENT_TEAM = 3C6LFRBP5L;
-				ENABLE_PREVIEWS = YES;
-				GENERATE_INFOPLIST_FILE = YES;
-				INFOPLIST_KEY_NSPhotoLibraryAddUsageDescription = "We need to save compressed videos back to your library";
-				INFOPLIST_KEY_NSPhotoLibraryUsageDescription = "We need access to compress your large videos and save space";
-				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
-				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
-				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
-				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
-				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
-				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
-				LD_RUNPATH_SEARCH_PATHS = (
-					"$(inherited)",
-					"@executable_path/Frameworks",
-				);
-				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = com.lxb.SpaceSwap;
-				PRODUCT_NAME = "$(TARGET_NAME)";
-			};
-			name = Release;
 		};
 		ED18BC5E2F39CE490026B0A8 /* Release */ = {
 			isa = XCBuildConfiguration;
@@ -515,16 +493,6 @@
 			};
 			name = Release;
 		};
-		ED18BF222F39FCD60026B0A8 /* Debug */ = {
-			isa = XCBuildConfiguration;
-			buildSettings = {
-				COPY_PHASE_STRIP = NO;
-				GCC_DYNAMIC_NO_PIC = NO;
-				GCC_OPTIMIZATION_LEVEL = 0;
-				PRODUCT_NAME = SpaceSwapTests;
-			};
-			name = Debug;
-		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
@@ -549,8 +517,8 @@
 		ED18BC5C2F39CE490026B0A8 /* Build configuration list for PBXNativeTarget "SpaceSwapTests" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
+				ED18BC5D2F39CE490026B0A8 /* Debug */,
 				ED18BC5E2F39CE490026B0A8 /* Release */,
-				ED18BF222F39FCD60026B0A8 /* Debug */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;

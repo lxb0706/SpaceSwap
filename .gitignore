@@ -4,6 +4,7 @@
 
 ## User settings
 xcuserdata/
+SpaceSwap.xcodeproj/project.xcworkspace/xcuserdata/
 
 ## Obj-C/Swift specific
 *.hmap
