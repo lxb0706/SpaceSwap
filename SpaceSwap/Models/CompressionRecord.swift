@@ -13,6 +13,7 @@ final class CompressionRecord {
     var id: UUID
     var originalAssetID: String
     var compressedAssetID: String
+    var originalFilename: String
     var date: Date
     var originalSize: Int64
     var compressedSize: Int64
@@ -24,6 +25,7 @@ final class CompressionRecord {
     init(
         originalAssetID: String,
         compressedAssetID: String,
+        originalFilename: String = "",
         date: Date,
         originalSize: Int64,
         compressedSize: Int64,
@@ -35,6 +37,7 @@ final class CompressionRecord {
         self.id = UUID()
         self.originalAssetID = originalAssetID
         self.compressedAssetID = compressedAssetID
+        self.originalFilename = originalFilename
         self.date = date
         self.originalSize = originalSize
         self.compressedSize = compressedSize

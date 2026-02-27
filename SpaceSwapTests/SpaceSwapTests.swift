@@ -33,4 +33,20 @@ final class SpaceSwapTests: XCTestCase {
         }
     }
 
+    func testCompressionRecordStoresOriginalFilename() throws {
+        let record = CompressionRecord(
+            originalAssetID: "orig",
+            compressedAssetID: "comp",
+            originalFilename: "IMG_0001.MOV",
+            date: Date(),
+            originalSize: 100,
+            compressedSize: 50,
+            compressionRatio: 0.5,
+            quality: "Medium",
+            status: 1,
+            isAssetDeleted: false
+        )
+        XCTAssertEqual(record.originalFilename, "IMG_0001.MOV")
+    }
+
 }
