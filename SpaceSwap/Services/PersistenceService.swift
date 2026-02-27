@@ -13,6 +13,7 @@ protocol PersistenceServiceProtocol {
     func save(record: CompressionRecord) async throws
     func fetchAll() async throws -> [CompressionRecord]
     func delete(record: CompressionRecord) async throws
+    func update(record: CompressionRecord) async throws
     var totalSavedSpace: Int64 { get async throws }
 }
 
@@ -47,6 +48,10 @@ final class PersistenceService: PersistenceServiceProtocol {
     
     func delete(record: CompressionRecord) async throws {
         modelContext.delete(record)
+        try modelContext.save()
+    }
+
+    func update(record: CompressionRecord) async throws {
         try modelContext.save()
     }
     

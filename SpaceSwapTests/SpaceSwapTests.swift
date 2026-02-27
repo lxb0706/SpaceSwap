@@ -6,6 +6,7 @@
 //
 
 import XCTest
+import SwiftData
 @testable import SpaceSwap
 
 final class SpaceSwapTests: XCTestCase {
@@ -65,4 +66,32 @@ final class SpaceSwapTests: XCTestCase {
         XCTAssertEqual(record.compressionRatio, 0.5, accuracy: 0.000_001)
     }
 
+    func testPersistenceUpdatePersistsAssetDeletedFlag() async throws {
+        let schema = Schema([CompressionRecord.self])
+        let modelConfiguration = ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)
+        let modelContainer = try ModelContainer(for: schema, configurations: [modelConfiguration])
+        let modelContext = ModelContext(modelContainer)
+        let persistenceService = PersistenceService(modelContext: modelContext)
+
+        let record = CompressionRecordFactory.make(
+            originalAssetID: "orig",
+            compressedAssetID: "comp",
+            originalFilename: "IMG_0001.MOV",
+            date: Date(timeIntervalSince1970: 0),
+            originalSize: 100,
+            compressedSize: 50,
+            quality: "Medium",
+            status: 1,
+            isAssetDeleted: false
+        )
+
+        try await persistenceService.save(record: record)
+
+        record.isAssetDeleted = true
+        try await persistenceService.update(record: record)
+
+        let records = try await persistenceService.fetchAll()
+        XCTAssertEqual(records.count, 1)
+        XCTAssertEqual(records.first?.isAssetDeleted, true)
+    }
 }
